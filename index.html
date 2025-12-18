@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8" />
-  <title>Exploration Map – Date Slider</title>
+  <title>Exploration Map – Auto Load</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -15,39 +15,33 @@
       background: #111;
       font-family: -apple-system, BlinkMacSystemFont, sans-serif;
     }
-    #map { height: 85%; }
-
+    #map { height: 80%; }
     #ui {
-      height: 15%;
+      height: 20%;
       padding: 10px 14px;
       background: #1a1a1a;
       color: #ddd;
       box-sizing: border-box;
     }
-
-    .row {
-      margin-bottom: 8px;
-    }
-
-    input[type="file"], input[type="range"], button {
+    .row { margin-bottom: 8px; }
+    input[type="range"] {
       width: 100%;
-      font-size: 12px;
-      padding: 8px;
+      font-size: 14px;
+      padding: 10px;
       border-radius: 8px;
       border: 1px solid #333;
       background: #111;
       color: #ddd;
     }
-
-    button { cursor: pointer; }
-
     #dateLabel {
-      font-size: 13px;
-      color: #ccc;
+      font-size: 14px;
+      color: #fff;
+      font-weight: bold;
+      margin-top: 6px;
+      display: block;
     }
-
     #status {
-      font-size: 11px;
+      font-size: 12px;
       color: #888;
     }
   </style>
@@ -58,70 +52,101 @@
 
 <div id="ui">
   <div class="row">
-    <input type="file" id="logInput" multiple />
-  </div>
-
-  <div class="row">
     <input type="range" id="dateSlider" min="0" max="0" value="0" disabled />
-    <div id="dateLabel">ログ未読込</div>
+    <span id="dateLabel">読み込み中…</span>
   </div>
-
-  <div class="row">
-    <button id="clearBtn">クリア</button>
-  </div>
-
-  <div class="row" id="status">ログを選択してください</div>
+  <div id="status">クラウドからログを読み込んでいます</div>
 </div>
 
 <script>
-  // ===== 地図
-  const map = L.map('map').setView([35.721625, 140.155500], 15);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+  // ===== ★ あなたの GAS Webアプリ URL を入れてください ★
+  const GAS_URL = "https://script.google.com/macros/s/AKfycbxBS-OE16Ny3fCVxkm01DNk1v-D3eBfRvly00A3CSoZWBy3viwZKIiDz4ZXJVXJKDlx/exec";
 
-  // ===== グリッド
+  // ===== 地図初期化
+  const map = L.map('map', { preferCanvas: true })
+    .setView([35.7216, 140.1555], 15);
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap'
+  }).addTo(map);
+
+  // ===== グリッド設定
   const GRID_LAT = 0.00012;
   const GRID_LNG = 0.00035;
 
   function gridKey(lat, lng) {
     return `${Math.floor(lat / GRID_LAT)}_${Math.floor(lng / GRID_LNG)}`;
   }
+
   function gridBounds(key) {
     const [x, y] = key.split('_').map(Number);
-    return [[x*GRID_LAT, y*GRID_LNG], [(x+1)*GRID_LAT, (y+1)*GRID_LNG]];
+    return [
+      [x * GRID_LAT, y * GRID_LNG],
+      [(x + 1) * GRID_LAT, (y + 1) * GRID_LNG]
+    ];
   }
 
-  let allPoints = [];
+  // ===== 状態
+  let allPoints = [];   // {lat,lng,date}
   let dates = [];
   let fogRects = [];
   let clearRects = [];
 
-  const logInput = document.getElementById('logInput');
   const slider = document.getElementById('dateSlider');
-  const label = document.getElementById('dateLabel');
+  const label  = document.getElementById('dateLabel');
   const status = document.getElementById('status');
 
   function clearLayers(arr) {
-    arr.forEach(r => map.removeLayer(r));
+    arr.forEach(l => map.removeLayer(l));
     arr.length = 0;
   }
 
   function drawFog() {
     const b = map.getBounds();
-    for (let x = Math.floor(b.getSouth()/GRID_LAT); x <= Math.floor(b.getNorth()/GRID_LAT); x++) {
-      for (let y = Math.floor(b.getWest()/GRID_LNG); y <= Math.floor(b.getEast()/GRID_LNG); y++) {
+    for (let x = Math.floor(b.getSouth() / GRID_LAT); x <= Math.floor(b.getNorth() / GRID_LAT); x++) {
+      for (let y = Math.floor(b.getWest() / GRID_LNG); y <= Math.floor(b.getEast() / GRID_LNG); y++) {
         fogRects.push(
-          L.rectangle(gridBounds(`${x}_${y}`), {
-            color: null, fillColor: '#0e0e11', fillOpacity: 0.45, weight: 0
-          }).addTo(map)
+          L.rectangle(
+            [[x * GRID_LAT, y * GRID_LNG], [(x + 1) * GRID_LAT, (y + 1) * GRID_LNG]],
+            { color: null, fillColor: '#0e0e11', fillOpacity: 0.5, weight: 0 }
+          ).addTo(map)
         );
       }
     }
   }
 
-  function drawClear(date) {
-    const pts = allPoints.filter(p => p.date === date);
-    const countMap = new Map();
+  // ===== GPX パース
+  function parseGPX(text) {
+    const pts = [];
+    const parser = new DOMParser();
+    const xml = parser.parseFromString(text, "application/xml");
+    const trkpts = xml.getElementsByTagName("trkpt");
 
+    for (let i = 0; i < trkpts.length; i++) {
+      const lat = parseFloat(trkpts[i].getAttribute("lat"));
+      const lng = parseFloat(trkpts[i].getAttribute("lon"));
+      const timeEl = trkpts[i].getElementsByTagName("time")[0];
+
+      if (!isNaN(lat) && !isNaN(lng) && timeEl) {
+        const date = timeEl.textContent.slice(0, 10);
+        pts.push({ lat, lng, date });
+      }
+    }
+    return pts;
+  }
+
+  function render(index) {
+    clearLayers(fogRects);
+    clearLayers(clearRects);
+    drawFog();
+
+    const targetDate = dates[index];
+    if (!targetDate) return;
+
+    const visibleDates = new Set(dates.slice(0, index + 1));
+    const pts = allPoints.filter(p => visibleDates.has(p.date));
+
+    const countMap = new Map();
     pts.forEach(p => {
       const k = gridKey(p.lat, p.lng);
       countMap.set(k, (countMap.get(k) || 0) + 1);
@@ -131,83 +156,64 @@
       clearRects.push(
         L.rectangle(gridBounds(k), {
           color: null,
-          fillColor: '#fff',
-          fillOpacity: Math.min(0.55, 0.3 + count*0.1),
+          fillColor: '#ffffff',
+          fillOpacity: Math.min(0.6, 0.3 + count * 0.05),
           weight: 0
         }).addTo(map)
       );
     });
+
+    label.textContent = `${targetDate} までの蓄積`;
   }
 
-  function render(index) {
-    clearLayers(fogRects);
-    clearLayers(clearRects);
-    drawFog();
+  // ===== ★ 自動ロード（ここが本命） ★
+  async function loadFromGAS() {
+    try {
+      const res = await fetch(GAS_URL);
+      const files = await res.json();
 
-    const date = dates[index];
-    if (!date) return;
+      allPoints = [];
 
-    drawClear(date);
-    label.textContent = `${date}（${index+1} / ${dates.length}）`;
-  }
+      files.forEach(f => {
+        allPoints.push(...parseGPX(f.content));
+      });
 
-  function parseLog(text) {
-    const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
-    const pts = [];
-    let lat=null,lng=null,time=null;
-
-    lines.forEach(l => {
-      if (l.startsWith('緯度:')) lat = parseFloat(l.replace('緯度:',''));
-      if (l.startsWith('経度:')) lng = parseFloat(l.replace('経度:',''));
-      if (l.startsWith('時刻:')) time = l.replace('時刻:','').trim();
-
-      if (lat && lng && time) {
-        pts.push({
-          lat, lng,
-          date: time.slice(0,10).replace(/\//g,'-')
-        });
-        lat=lng=time=null;
+      if (allPoints.length === 0) {
+        status.textContent = "ログは取得できましたが、点がありません";
+        label.textContent = "データなし";
+        return;
       }
-    });
-    return pts;
+
+      dates = Array.from(new Set(allPoints.map(p => p.date))).sort();
+
+      slider.min = 0;
+      slider.max = dates.length - 1;
+      slider.value = dates.length - 1;
+      slider.disabled = false;
+
+      status.textContent = `${files.length}ファイル / ${allPoints.length}点 読み込み完了`;
+      render(slider.value);
+
+    } catch (e) {
+      console.error(e);
+      status.textContent = "クラウドからの読み込みに失敗しました";
+      label.textContent = "エラー";
+    }
   }
 
-  logInput.addEventListener('change', e => {
-    const files = e.target.files;
-    allPoints = [];
-    let done = 0;
+  slider.addEventListener('input', () => render(Number(slider.value)));
 
-    Array.from(files).forEach(f => {
-      const r = new FileReader();
-      r.onload = () => {
-        allPoints.push(...parseLog(r.result));
-        done++;
-        if (done === files.length) {
-          dates = Array.from(new Set(allPoints.map(p=>p.date))).sort();
-          slider.max = dates.length - 1;
-          slider.value = slider.max;
-          slider.disabled = false;
-          status.textContent = `${files.length}ファイル / ${dates.length}日分`;
-          render(slider.value);
-        }
-      };
-      r.readAsText(f);
-    });
+  map.on('moveend', () => {
+    if (!slider.disabled) render(Number(slider.value));
+    else {
+      clearLayers(fogRects);
+      drawFog();
+    }
   });
 
-  slider.addEventListener('input', () => render(slider.value));
-
-  document.getElementById('clearBtn').onclick = () => {
-    allPoints=[]; dates=[];
-    slider.disabled=true;
-    label.textContent='ログ未読込';
-    status.textContent='クリアしました';
-    clearLayers(fogRects);
-    clearLayers(clearRects);
-    drawFog();
-  };
-
+  // ===== 起動時に自動ロード
   drawFog();
+  loadFromGAS();
 </script>
 
 </body>
