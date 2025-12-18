@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8" />
-  <title>Exploration Map – Auto Load</title>
+  <title>Exploration Map</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -16,6 +16,7 @@
       font-family: -apple-system, BlinkMacSystemFont, sans-serif;
     }
     #map { height: 80%; }
+
     #ui {
       height: 20%;
       padding: 10px 14px;
@@ -23,16 +24,19 @@
       color: #ddd;
       box-sizing: border-box;
     }
+
     .row { margin-bottom: 8px; }
-    input[type="range"] {
+
+    select, input[type="range"] {
       width: 100%;
-      font-size: 14px;
       padding: 10px;
-      border-radius: 8px;
-      border: 1px solid #333;
       background: #111;
       color: #ddd;
+      border: 1px solid #333;
+      border-radius: 8px;
+      font-size: 14px;
     }
+
     #dateLabel {
       font-size: 14px;
       color: #fff;
@@ -40,6 +44,7 @@
       margin-top: 6px;
       display: block;
     }
+
     #status {
       font-size: 12px;
       color: #888;
@@ -52,14 +57,24 @@
 
 <div id="ui">
   <div class="row">
-    <input type="range" id="dateSlider" min="0" max="0" value="0" disabled />
+    <select id="unitSelect">
+      <option value="minute">分（1分）</option>
+      <option value="hour">時間</option>
+      <option value="day" selected>日</option>
+      <option value="month">月</option>
+    </select>
+  </div>
+
+  <div class="row">
+    <input type="range" id="timeSlider" min="0" max="0" value="0" disabled />
     <span id="dateLabel">読み込み中…</span>
   </div>
+
   <div id="status">クラウドからログを読み込んでいます</div>
 </div>
 
 <script>
-  // ===== ★ あなたの GAS Webアプリ URL を入れてください ★
+  // ===== GAS Webアプリ URL
   const GAS_URL = "https://script.google.com/macros/s/AKfycbxBS-OE16Ny3fCVxkm01DNk1v-D3eBfRvly00A3CSoZWBy3viwZKIiDz4ZXJVXJKDlx/exec";
 
   // ===== 地図初期化
@@ -70,7 +85,7 @@
     attribution: '© OpenStreetMap'
   }).addTo(map);
 
-  // ===== グリッド設定
+  // ===== グリッド
   const GRID_LAT = 0.00012;
   const GRID_LNG = 0.00035;
 
@@ -87,14 +102,16 @@
   }
 
   // ===== 状態
-  let allPoints = [];   // {lat,lng,date}
-  let dates = [];
+  let allPoints = [];     // {lat,lng,time}
+  let timeBuckets = [];  // [[timeKey, points[]]]
+
   let fogRects = [];
   let clearRects = [];
 
-  const slider = document.getElementById('dateSlider');
+  const slider = document.getElementById('timeSlider');
   const label  = document.getElementById('dateLabel');
   const status = document.getElementById('status');
+  const unitSelect = document.getElementById('unitSelect');
 
   function clearLayers(arr) {
     arr.forEach(l => map.removeLayer(l));
@@ -108,11 +125,50 @@
         fogRects.push(
           L.rectangle(
             [[x * GRID_LAT, y * GRID_LNG], [(x + 1) * GRID_LAT, (y + 1) * GRID_LNG]],
-            { color: null, fillColor: '#0e0e11', fillOpacity: 0.5, weight: 0 }
+            {
+              color: null,
+              fillColor: '#0c1220',
+              fillOpacity: 0.55,
+              weight: 0
+            }
           ).addTo(map)
         );
       }
     }
+  }
+
+  // ===== 時間キー生成（★ 1分対応）
+  function makeTimeKey(iso, unit) {
+    const d = new Date(iso);
+
+    if (unit === 'minute') {
+      d.setSeconds(0, 0);
+    }
+    if (unit === 'hour') {
+      d.setMinutes(0, 0, 0);
+    }
+    if (unit === 'day') {
+      d.setHours(0, 0, 0, 0);
+    }
+    if (unit === 'month') {
+      d.setDate(1);
+      d.setHours(0, 0, 0, 0);
+    }
+
+    return d.toISOString();
+  }
+
+  function buildBuckets(unit) {
+    const mapBuckets = new Map();
+
+    allPoints.forEach(p => {
+      const key = makeTimeKey(p.time, unit);
+      if (!mapBuckets.has(key)) mapBuckets.set(key, []);
+      mapBuckets.get(key).push(p);
+    });
+
+    return Array.from(mapBuckets.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]));
   }
 
   // ===== GPX パース
@@ -128,8 +184,11 @@
       const timeEl = trkpts[i].getElementsByTagName("time")[0];
 
       if (!isNaN(lat) && !isNaN(lng) && timeEl) {
-        const date = timeEl.textContent.slice(0, 10);
-        pts.push({ lat, lng, date });
+        pts.push({
+          lat,
+          lng,
+          time: timeEl.textContent
+        });
       }
     }
     return pts;
@@ -140,68 +199,68 @@
     clearLayers(clearRects);
     drawFog();
 
-    const targetDate = dates[index];
-    if (!targetDate) return;
-
-    const visibleDates = new Set(dates.slice(0, index + 1));
-    const pts = allPoints.filter(p => visibleDates.has(p.date));
-
+    const visible = timeBuckets.slice(0, index + 1);
     const countMap = new Map();
-    pts.forEach(p => {
-      const k = gridKey(p.lat, p.lng);
-      countMap.set(k, (countMap.get(k) || 0) + 1);
+
+    visible.forEach(([_, pts]) => {
+      pts.forEach(p => {
+        const k = gridKey(p.lat, p.lng);
+        countMap.set(k, (countMap.get(k) || 0) + 1);
+      });
     });
 
     countMap.forEach((count, k) => {
       clearRects.push(
         L.rectangle(gridBounds(k), {
           color: null,
-          fillColor: '#ffffff',
+          fillColor: '#f5f6f7',
           fillOpacity: Math.min(0.6, 0.3 + count * 0.05),
           weight: 0
         }).addTo(map)
       );
     });
 
-    label.textContent = `${targetDate} までの蓄積`;
+    label.textContent = new Date(timeBuckets[index][0]).toLocaleString();
   }
 
-  // ===== ★ 自動ロード（ここが本命） ★
+  function rebuild() {
+    timeBuckets = buildBuckets(unitSelect.value);
+
+    slider.min = 0;
+    slider.max = timeBuckets.length - 1;
+    slider.value = slider.max;
+    slider.disabled = false;
+
+    render(slider.value);
+  }
+
+  // ===== 自動ロード
   async function loadFromGAS() {
     try {
       const res = await fetch(GAS_URL);
       const files = await res.json();
 
       allPoints = [];
-
       files.forEach(f => {
         allPoints.push(...parseGPX(f.content));
       });
 
       if (allPoints.length === 0) {
-        status.textContent = "ログは取得できましたが、点がありません";
-        label.textContent = "データなし";
+        status.textContent = "ログはありますが、点がありません";
         return;
       }
 
-      dates = Array.from(new Set(allPoints.map(p => p.date))).sort();
-
-      slider.min = 0;
-      slider.max = dates.length - 1;
-      slider.value = dates.length - 1;
-      slider.disabled = false;
-
       status.textContent = `${files.length}ファイル / ${allPoints.length}点 読み込み完了`;
-      render(slider.value);
+      rebuild();
 
     } catch (e) {
       console.error(e);
-      status.textContent = "クラウドからの読み込みに失敗しました";
-      label.textContent = "エラー";
+      status.textContent = "ログの読み込みに失敗しました";
     }
   }
 
   slider.addEventListener('input', () => render(Number(slider.value)));
+  unitSelect.addEventListener('change', rebuild);
 
   map.on('moveend', () => {
     if (!slider.disabled) render(Number(slider.value));
@@ -211,7 +270,7 @@
     }
   });
 
-  // ===== 起動時に自動ロード
+  // ===== 起動
   drawFog();
   loadFromGAS();
 </script>
