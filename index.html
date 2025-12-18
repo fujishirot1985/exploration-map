@@ -2,10 +2,9 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8" />
-  <title>Exploration Map</title>
+  <title>Fog Map – Farther Walk Prototype</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <!-- Leaflet -->
   <link
     rel="stylesheet"
     href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
@@ -15,212 +14,196 @@
   </script>
 
   <style>
-    html, body, #map { height: 100%; margin: 0; }
-    .ctrl {
-      position: absolute;
-      left: 10px;
-      z-index: 1000;
-      background: white;
-      padding: 6px;
+    html, body {
+      margin: 0;
+      height: 100%;
+      background: #111;
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
     }
-    #gpxInput { top: 10px; }
-    #logInput { top: 50px; }
-    #resetBtn { top: 90px; }
+    #map { height: 88%; }
+    #ui {
+      height: 12%;
+      padding: 12px 16px;
+      background: #1a1a1a;
+      color: #ccc;
+      box-sizing: border-box;
+    }
+    #monthLabel {
+      font-size: 14px;
+      margin-top: 4px;
+    }
+    input[type=range] { width: 100%; }
   </style>
 </head>
 <body>
 
 <div id="map"></div>
 
-<!-- GPX 読み込み（複数対応） -->
-<input type="file" id="gpxInput" accept=".gpx" multiple class="ctrl" />
-
-<!-- TXT 読み込み（複数対応） -->
-<input type="file" id="logInput" accept=".txt" multiple class="ctrl" />
-
-<!-- リセット（積み上げを消す） -->
-<button id="resetBtn" class="ctrl">リセット</button>
+<div id="ui">
+  <input type="range" min="5" max="7" value="6" id="slider">
+  <div id="monthLabel">6月</div>
+</div>
 
 <script>
-  // =========================
-  // 1. 地図の初期表示
-  // =========================
-  const centerLat = 35.719599;
-  const centerLng = 140.160936;
+  // ===== 起点
+  const CENTER_LAT = 35.721625;
+  const CENTER_LNG = 140.155500;
 
-  const map = L.map('map').setView([centerLat, centerLng], 14);
+  const map = L.map('map', { zoomControl: false })
+    .setView([CENTER_LAT, CENTER_LNG], 15);
 
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '© OpenStreetMap'
   }).addTo(map);
 
-  // 霧専用レイヤー（毎回ここだけ描き直す）
-  const fogLayer = L.layerGroup().addTo(map);
-
-  // =========================
-  // 2. グリッド設定
-  // =========================
-  const GRID_SIZE = 0.001; // 約100m
+  // ===== グリッド
+  const GRID_LAT = 0.00012;
+  const GRID_LNG = 0.00035;
 
   function gridKey(lat, lng) {
-    const x = Math.floor(lat / GRID_SIZE);
-    const y = Math.floor(lng / GRID_SIZE);
+    const x = Math.floor(lat / GRID_LAT);
+    const y = Math.floor(lng / GRID_LNG);
     return `${x}_${y}`;
   }
 
   function gridBounds(key) {
     const [x, y] = key.split('_').map(Number);
-    const lat1 = x * GRID_SIZE;
-    const lng1 = y * GRID_SIZE;
-    const lat2 = lat1 + GRID_SIZE;
-    const lng2 = lng1 + GRID_SIZE;
+    const lat1 = x * GRID_LAT;
+    const lng1 = y * GRID_LNG;
+    const lat2 = lat1 + GRID_LAT;
+    const lng2 = lng1 + GRID_LNG;
     return [[lat1, lng1], [lat2, lng2]];
   }
 
-  // =========================
-  // 3. 訪問済みグリッド（積み上げる）
-  // =========================
-  const visited = new Set();
+  // ===== 月ごとに方向＋半径をさらに拡張
+  const monthData = {
+    // --- 5月：西・北にかなり遠出
+    5: [
+      [35.7216,140.1551],[35.7216,140.1547],[35.7216,140.1543],
+      [35.7220,140.1545],[35.7224,140.1545],
+      [35.7227,140.1548],
 
-  // =========================
-  // 4. 霧を描画
-  // =========================
+      // さらに西北へ
+      [35.7231,140.1540],[35.7235,140.1532],
+      [35.7239,140.1524]
+    ],
+
+    // --- 6月：東方向に大きく伸びる
+    6: [
+      // 起点〜生活圏
+      [35.7216,140.1551],[35.7216,140.1554],[35.7216,140.1557],
+      [35.7213,140.1554],[35.7219,140.1554],
+
+      // 東西幹線
+      [35.7216,140.1548],[35.7216,140.1551],[35.7216,140.1554],
+      [35.7216,140.1557],[35.7216,140.1560],[35.7216,140.1563],
+      [35.7216,140.1566],[35.7216,140.1569],
+
+      // 東へ遠出（さらに倍）
+      [35.7216,140.1573],[35.7216,140.1578],[35.7216,140.1583],
+      [35.7216,140.1588],[35.7216,140.1593],
+      [35.7219,140.1598],[35.7222,140.1603]
+    ],
+
+    // --- 7月：南東にかなり冒険
+    7: [
+      // 東南方向
+      [35.7216,140.1568],[35.7216,140.1573],[35.7216,140.1578],
+      [35.7212,140.1583],[35.7208,140.1588],
+      [35.7204,140.1593],[35.7200,140.1598],
+
+      // さらに南へ
+      [35.7196,140.1602],[35.7192,140.1606]
+    ]
+  };
+
+  let fogRects = [];
+  let clearRects = [];
+
+  function clearAll() {
+    fogRects.forEach(r => map.removeLayer(r));
+    clearRects.forEach(r => map.removeLayer(r));
+    fogRects = [];
+    clearRects = [];
+  }
+
   function drawFog() {
-    fogLayer.clearLayers();
-
     const bounds = map.getBounds();
     const latMin = bounds.getSouth();
     const latMax = bounds.getNorth();
     const lngMin = bounds.getWest();
     const lngMax = bounds.getEast();
 
-    const xStart = Math.floor(latMin / GRID_SIZE);
-    const xEnd   = Math.floor(latMax / GRID_SIZE);
-    const yStart = Math.floor(lngMin / GRID_SIZE);
-    const yEnd   = Math.floor(lngMax / GRID_SIZE);
+    const xStart = Math.floor(latMin / GRID_LAT);
+    const xEnd   = Math.floor(latMax / GRID_LAT);
+    const yStart = Math.floor(lngMin / GRID_LNG);
+    const yEnd   = Math.floor(lngMax / GRID_LNG);
 
     for (let x = xStart; x <= xEnd; x++) {
       for (let y = yStart; y <= yEnd; y++) {
-        const key = `${x}_${y}`;
-        const b = gridBounds(key);
-        const isVisited = visited.has(key);
-
-        L.rectangle(b, {
-          color: null,
-          fillColor: isVisited ? '#ffffff' : '#000000',
-          fillOpacity: isVisited ? 0.1 : 0.7,
-          weight: 0
-        }).addTo(fogLayer);
+        const rect = L.rectangle(
+          [[x * GRID_LAT, y * GRID_LNG],
+           [(x + 1) * GRID_LAT, (y + 1) * GRID_LNG]],
+          {
+            color: null,
+            fillColor: '#0e0e11',
+            fillOpacity: 0.45,
+            weight: 0
+          }
+        ).addTo(map);
+        fogRects.push(rect);
       }
     }
   }
 
-  // ズーム/移動したら霧を描き直す（視界内だけ霧が更新される）
-  map.on('moveend zoomend', drawFog);
+  function drawCleared(month) {
+    const months = [month - 1, month, month + 1];
 
-  // =========================
-  // 共通：ファイルをテキストで読む
-  // =========================
-  function readFileAsText(file) {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result ?? ''));
-      reader.onerror = reject;
-      reader.readAsText(file);
+    months.forEach(m => {
+      if (!monthData[m]) return;
+
+      const countMap = new Map();
+      monthData[m].forEach(([lat, lng]) => {
+        const key = gridKey(lat, lng);
+        countMap.set(key, (countMap.get(key) || 0) + 1);
+      });
+
+      countMap.forEach((count, key) => {
+        let opacity;
+        if (m === month) {
+          opacity = (count >= 2) ? 0.45 : 0.30;
+        } else {
+          opacity = 0.16;
+        }
+
+        const rect = L.rectangle(gridBounds(key), {
+          color: null,
+          fillColor: '#ffffff',
+          fillOpacity: opacity,
+          weight: 0
+        }).addTo(map);
+
+        clearRects.push(rect);
+      });
     });
   }
 
-  // =========================
-  // 5. GPX（複数）読み込み → visitedに追加
-  // =========================
-  async function addFromGpxFiles(files) {
-    const texts = await Promise.all(files.map(readFileAsText));
-
-    for (const text of texts) {
-      const parser = new DOMParser();
-      const xml = parser.parseFromString(text, "application/xml");
-      const points = xml.getElementsByTagName("trkpt");
-
-      for (let i = 0; i < points.length; i++) {
-        const lat = parseFloat(points[i].getAttribute("lat"));
-        const lng = parseFloat(points[i].getAttribute("lon"));
-        if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
-        visited.add(gridKey(lat, lng));
-      }
-    }
+  function render(month) {
+    clearAll();
+    drawFog();
+    drawCleared(month);
   }
 
-  document.getElementById('gpxInput').addEventListener('change', async (e) => {
-    const files = Array.from(e.target.files || []);
-    if (files.length === 0) return;
+  const slider = document.getElementById('slider');
+  const label = document.getElementById('monthLabel');
 
-    await addFromGpxFiles(files);
-    drawFog();
+  slider.addEventListener('input', () => {
+    const m = Number(slider.value);
+    label.textContent = `${m}月`;
+    render(m);
   });
 
-  // =========================
-  // 6. walk_log_*.txt（複数）読み込み → visitedに追加
-  // =========================
-  function addFromWalkLogText(text) {
-    const lines = text.split('\n');
-
-    let lat = null;
-    let lng = null;
-
-    for (const raw of lines) {
-      const line = raw.trim();
-
-      // 例: 緯度: 35.xxxx
-      if (line.startsWith('緯度:')) {
-        lat = parseFloat(line.replace('緯度:', '').trim());
-        if (!Number.isFinite(lat)) lat = null;
-        continue;
-      }
-
-      // 例: 経度: 139.xxxx
-      if (line.startsWith('経度:')) {
-        lng = parseFloat(line.replace('経度:', '').trim());
-        if (!Number.isFinite(lng)) lng = null;
-        continue;
-      }
-
-      // 緯度・経度が揃ったら1点として追加
-      if (lat !== null && lng !== null) {
-        visited.add(gridKey(lat, lng));
-        lat = null;
-        lng = null;
-      }
-    }
-
-    // 末尾が経度行で終わっていた場合にも対応
-    if (lat !== null && lng !== null) {
-      visited.add(gridKey(lat, lng));
-    }
-  }
-
-  async function addFromTxtFiles(files) {
-    const texts = await Promise.all(files.map(readFileAsText));
-    for (const text of texts) addFromWalkLogText(text);
-  }
-
-  document.getElementById('logInput').addEventListener('change', async (e) => {
-    const files = Array.from(e.target.files || []);
-    if (files.length === 0) return;
-
-    await addFromTxtFiles(files);
-    drawFog();
-  });
-
-  // =========================
-  // 7. リセット
-  // =========================
-  document.getElementById('resetBtn').addEventListener('click', () => {
-    visited.clear();
-    drawFog();
-  });
-
-  // 起動時：全面霧
-  drawFog();
+  render(6);
 </script>
 
 </body>
