@@ -2,11 +2,10 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8" />
-  <title>Fog Map – Organic Walks</title>
+  <title>Exploration Map – Date Slider</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <link rel="stylesheet"
-        href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
   <style>
@@ -16,19 +15,41 @@
       background: #111;
       font-family: -apple-system, BlinkMacSystemFont, sans-serif;
     }
-    #map { height: 88%; }
+    #map { height: 85%; }
+
     #ui {
-      height: 12%;
-      padding: 12px 16px;
+      height: 15%;
+      padding: 10px 14px;
       background: #1a1a1a;
-      color: #ccc;
+      color: #ddd;
       box-sizing: border-box;
     }
-    #monthLabel {
-      font-size: 14px;
-      margin-top: 4px;
+
+    .row {
+      margin-bottom: 8px;
     }
-    input[type=range] { width: 100%; }
+
+    input[type="file"], input[type="range"], button {
+      width: 100%;
+      font-size: 12px;
+      padding: 8px;
+      border-radius: 8px;
+      border: 1px solid #333;
+      background: #111;
+      color: #ddd;
+    }
+
+    button { cursor: pointer; }
+
+    #dateLabel {
+      font-size: 13px;
+      color: #ccc;
+    }
+
+    #status {
+      font-size: 11px;
+      color: #888;
+    }
   </style>
 </head>
 <body>
@@ -36,182 +57,157 @@
 <div id="map"></div>
 
 <div id="ui">
-  <input type="range" min="1" max="12" value="6" id="slider">
-  <div id="monthLabel">6月</div>
+  <div class="row">
+    <input type="file" id="logInput" multiple />
+  </div>
+
+  <div class="row">
+    <input type="range" id="dateSlider" min="0" max="0" value="0" disabled />
+    <div id="dateLabel">ログ未読込</div>
+  </div>
+
+  <div class="row">
+    <button id="clearBtn">クリア</button>
+  </div>
+
+  <div class="row" id="status">ログを選択してください</div>
 </div>
 
 <script>
-  // ===== 自宅（必ず通る点）
-  const HOME_LAT = 35.721625;
-  const HOME_LNG = 140.155500;
+  // ===== 地図
+  const map = L.map('map').setView([35.721625, 140.155500], 15);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
-  const map = L.map('map', { zoomControl: false })
-    .setView([HOME_LAT, HOME_LNG], 15);
-
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '© OpenStreetMap'
-  }).addTo(map);
-
+  // ===== グリッド
   const GRID_LAT = 0.00012;
   const GRID_LNG = 0.00035;
 
   function gridKey(lat, lng) {
     return `${Math.floor(lat / GRID_LAT)}_${Math.floor(lng / GRID_LNG)}`;
   }
-
   function gridBounds(key) {
     const [x, y] = key.split('_').map(Number);
-    return [
-      [x * GRID_LAT, y * GRID_LNG],
-      [(x + 1) * GRID_LAT, (y + 1) * GRID_LNG]
-    ];
+    return [[x*GRID_LAT, y*GRID_LNG], [(x+1)*GRID_LAT, (y+1)*GRID_LNG]];
   }
 
-  // ===== 基本半径
-  const BASE_RX = 0.0022;
-  const BASE_RY = 0.0017;
-
-  // 月ごとの「主方向」をランダムに生成（かぶりOK）
-  const monthAngles = Array.from({ length: 13 }, () =>
-    Math.random() * Math.PI * 2
-  );
-
-  const monthData = {};
-  for (let m = 1; m <= 12; m++) {
-    monthData[m] = makeOrganicLoop(m);
-  }
-
-  function makeOrganicLoop(month) {
-    const pts = [];
-    const steps = 36;
-
-    const rx = BASE_RX * (0.9 + Math.random() * 0.3);
-    const ry = BASE_RY * (0.9 + Math.random() * 0.3);
-
-    const rotation = monthAngles[month];
-
-    // 歩行ノイズ（累積）
-    let noiseLat = 0;
-    let noiseLng = 0;
-
-    const raw = [];
-
-    for (let i = 0; i <= steps; i++) {
-      const t = (Math.PI * 2 * i) / steps;
-
-      // 基本円
-      let x = Math.cos(t) * rx;
-      let y = Math.sin(t) * ry;
-
-      // ランダムウォーク的ノイズ
-      noiseLat += (Math.random() - 0.5) * 0.00004;
-      noiseLng += (Math.random() - 0.5) * 0.00004;
-
-      x += noiseLat;
-      y += noiseLng;
-
-      // 回転
-      const lat =
-        x * Math.cos(rotation) - y * Math.sin(rotation);
-      const lng =
-        x * Math.sin(rotation) + y * Math.cos(rotation);
-
-      raw.push([lat, lng]);
-    }
-
-    // 円周上の始点を自宅に合わせる
-    const offsetLat = HOME_LAT - raw[0][0];
-    const offsetLng = HOME_LNG - raw[0][1];
-
-    raw.forEach(([lat, lng]) => {
-      pts.push([
-        lat + offsetLat,
-        lng + offsetLng
-      ]);
-    });
-
-    return pts;
-  }
-
+  let allPoints = [];
+  let dates = [];
   let fogRects = [];
   let clearRects = [];
 
-  function clearAll() {
-    fogRects.forEach(r => map.removeLayer(r));
-    clearRects.forEach(r => map.removeLayer(r));
-    fogRects = [];
-    clearRects = [];
+  const logInput = document.getElementById('logInput');
+  const slider = document.getElementById('dateSlider');
+  const label = document.getElementById('dateLabel');
+  const status = document.getElementById('status');
+
+  function clearLayers(arr) {
+    arr.forEach(r => map.removeLayer(r));
+    arr.length = 0;
   }
 
   function drawFog() {
     const b = map.getBounds();
-    for (
-      let x = Math.floor(b.getSouth() / GRID_LAT);
-      x <= Math.floor(b.getNorth() / GRID_LAT);
-      x++
-    ) {
-      for (
-        let y = Math.floor(b.getWest() / GRID_LNG);
-        y <= Math.floor(b.getEast() / GRID_LNG);
-        y++
-      ) {
+    for (let x = Math.floor(b.getSouth()/GRID_LAT); x <= Math.floor(b.getNorth()/GRID_LAT); x++) {
+      for (let y = Math.floor(b.getWest()/GRID_LNG); y <= Math.floor(b.getEast()/GRID_LNG); y++) {
         fogRects.push(
-          L.rectangle(
-            [[x * GRID_LAT, y * GRID_LNG],
-             [(x + 1) * GRID_LAT, (y + 1) * GRID_LNG]],
-            {
-              color: null,
-              fillColor: '#0e0e11',
-              fillOpacity: 0.45,
-              weight: 0
-            }
-          ).addTo(map)
+          L.rectangle(gridBounds(`${x}_${y}`), {
+            color: null, fillColor: '#0e0e11', fillOpacity: 0.45, weight: 0
+          }).addTo(map)
         );
       }
     }
   }
 
-  function drawCleared(month) {
-    const months = [month - 1, month, month + 1];
+  function drawClear(date) {
+    const pts = allPoints.filter(p => p.date === date);
+    const countMap = new Map();
 
-    months.forEach(m => {
-      if (!monthData[m]) return;
+    pts.forEach(p => {
+      const k = gridKey(p.lat, p.lng);
+      countMap.set(k, (countMap.get(k) || 0) + 1);
+    });
 
-      const countMap = new Map();
-      monthData[m].forEach(([lat, lng]) => {
-        const k = gridKey(lat, lng);
-        countMap.set(k, (countMap.get(k) || 0) + 1);
-      });
-
-      countMap.forEach((count, k) => {
-        clearRects.push(
-          L.rectangle(gridBounds(k), {
-            color: null,
-            fillColor: '#ffffff',
-            fillOpacity: m === month ? 0.35 : 0.15,
-            weight: 0
-          }).addTo(map)
-        );
-      });
+    countMap.forEach((count, k) => {
+      clearRects.push(
+        L.rectangle(gridBounds(k), {
+          color: null,
+          fillColor: '#fff',
+          fillOpacity: Math.min(0.55, 0.3 + count*0.1),
+          weight: 0
+        }).addTo(map)
+      );
     });
   }
 
-  function render(month) {
-    clearAll();
+  function render(index) {
+    clearLayers(fogRects);
+    clearLayers(clearRects);
     drawFog();
-    drawCleared(month);
+
+    const date = dates[index];
+    if (!date) return;
+
+    drawClear(date);
+    label.textContent = `${date}（${index+1} / ${dates.length}）`;
   }
 
-  const slider = document.getElementById('slider');
-  const label = document.getElementById('monthLabel');
+  function parseLog(text) {
+    const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+    const pts = [];
+    let lat=null,lng=null,time=null;
 
-  slider.addEventListener('input', () => {
-    const m = Number(slider.value);
-    label.textContent = `${m}月`;
-    render(m);
+    lines.forEach(l => {
+      if (l.startsWith('緯度:')) lat = parseFloat(l.replace('緯度:',''));
+      if (l.startsWith('経度:')) lng = parseFloat(l.replace('経度:',''));
+      if (l.startsWith('時刻:')) time = l.replace('時刻:','').trim();
+
+      if (lat && lng && time) {
+        pts.push({
+          lat, lng,
+          date: time.slice(0,10).replace(/\//g,'-')
+        });
+        lat=lng=time=null;
+      }
+    });
+    return pts;
+  }
+
+  logInput.addEventListener('change', e => {
+    const files = e.target.files;
+    allPoints = [];
+    let done = 0;
+
+    Array.from(files).forEach(f => {
+      const r = new FileReader();
+      r.onload = () => {
+        allPoints.push(...parseLog(r.result));
+        done++;
+        if (done === files.length) {
+          dates = Array.from(new Set(allPoints.map(p=>p.date))).sort();
+          slider.max = dates.length - 1;
+          slider.value = slider.max;
+          slider.disabled = false;
+          status.textContent = `${files.length}ファイル / ${dates.length}日分`;
+          render(slider.value);
+        }
+      };
+      r.readAsText(f);
+    });
   });
 
-  render(6);
+  slider.addEventListener('input', () => render(slider.value));
+
+  document.getElementById('clearBtn').onclick = () => {
+    allPoints=[]; dates=[];
+    slider.disabled=true;
+    label.textContent='ログ未読込';
+    status.textContent='クリアしました';
+    clearLayers(fogRects);
+    clearLayers(clearRects);
+    drawFog();
+  };
+
+  drawFog();
 </script>
 
 </body>
