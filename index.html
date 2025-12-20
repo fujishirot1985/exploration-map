@@ -15,6 +15,7 @@
       background: #111;
       font-family: -apple-system, BlinkMacSystemFont, sans-serif;
     }
+
     #map { height: 80%; }
 
     #ui {
@@ -27,7 +28,7 @@
 
     .row { margin-bottom: 8px; }
 
-    select, input[type="range"] {
+    select, input[type="range"], button {
       width: 100%;
       padding: 10px;
       background: #111;
@@ -35,6 +36,23 @@
       border: 1px solid #333;
       border-radius: 8px;
       font-size: 14px;
+    }
+
+    /* ===== スライダー操作性改善 ===== */
+    input[type="range"] {
+      width: 96%;
+      margin: 0 auto;
+      display: block;
+      height: 28px;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: #fff;
+      border: none;
     }
 
     #dateLabel {
@@ -70,14 +88,16 @@
     <span id="dateLabel">読み込み中…</span>
   </div>
 
+  <div class="row">
+    <button id="jumpBtn">ログに寄せる</button>
+  </div>
+
   <div id="status">クラウドからログを読み込んでいます</div>
 </div>
 
 <script>
-  // ===== GAS Webアプリ URL
   const GAS_URL = "https://script.google.com/macros/s/AKfycbxBS-OE16Ny3fCVxkm01DNk1v-D3eBfRvly00A3CSoZWBy3viwZKIiDz4ZXJVXJKDlx/exec";
 
-  // ===== 地図初期化
   const map = L.map('map', { preferCanvas: true })
     .setView([35.7216, 140.1555], 15);
 
@@ -85,7 +105,6 @@
     attribution: '© OpenStreetMap'
   }).addTo(map);
 
-  // ===== グリッド
   const GRID_LAT = 0.0003;
   const GRID_LNG = 0.0004;
 
@@ -101,17 +120,17 @@
     ];
   }
 
-  // ===== 状態
   let allPoints = [];
   let timeBuckets = [];
-
   let fogRects = [];
   let clearRects = [];
+  let currentCenter = null;
 
   const slider = document.getElementById('timeSlider');
   const label  = document.getElementById('dateLabel');
   const status = document.getElementById('status');
   const unitSelect = document.getElementById('unitSelect');
+  const jumpBtn = document.getElementById('jumpBtn');
 
   function clearLayers(arr) {
     arr.forEach(l => map.removeLayer(l));
@@ -125,28 +144,19 @@
         fogRects.push(
           L.rectangle(
             [[x * GRID_LAT, y * GRID_LNG], [(x + 1) * GRID_LAT, (y + 1) * GRID_LNG]],
-            {
-              color: null,
-              fillColor: '#0c1220',
-              fillOpacity: 0.55,
-              weight: 0
-            }
+            { color: null, fillColor: '#0c1220', fillOpacity: 0.55, weight: 0 }
           ).addTo(map)
         );
       }
     }
   }
 
-  // ===== 時間キー生成
   function makeTimeKey(iso, unit) {
     const d = new Date(iso);
     if (unit === 'minute') d.setSeconds(0, 0);
     if (unit === 'hour')   d.setMinutes(0, 0, 0);
     if (unit === 'day')    d.setHours(0, 0, 0, 0);
-    if (unit === 'month') {
-      d.setDate(1);
-      d.setHours(0, 0, 0, 0);
-    }
+    if (unit === 'month') { d.setDate(1); d.setHours(0, 0, 0, 0); }
     return d.toISOString();
   }
 
@@ -157,26 +167,27 @@
       if (!mapBuckets.has(key)) mapBuckets.set(key, []);
       mapBuckets.get(key).push(p);
     });
-    return Array.from(mapBuckets.entries())
-      .sort((a, b) => a[0].localeCompare(b[0]));
+    return Array.from(mapBuckets.entries()).sort((a, b) => a[0].localeCompare(b[0]));
   }
 
-  // ===== 同一日判定
   function sameDay(a, b) {
-    return (
-      a.getFullYear() === b.getFullYear() &&
-      a.getMonth() === b.getMonth() &&
-      a.getDate() === b.getDate()
-    );
+    return a.getFullYear() === b.getFullYear() &&
+           a.getMonth() === b.getMonth() &&
+           a.getDate() === b.getDate();
   }
 
-  // ===== GPX パース
+  function getCenterFromBuckets(buckets) {
+    let lat = 0, lng = 0, count = 0;
+    buckets.forEach(([_, pts]) => {
+      pts.forEach(p => { lat += p.lat; lng += p.lng; count++; });
+    });
+    return count ? [lat / count, lng / count] : null;
+  }
+
   function parseGPX(text) {
     const pts = [];
-    const parser = new DOMParser();
-    const xml = parser.parseFromString(text, "application/xml");
+    const xml = new DOMParser().parseFromString(text, "application/xml");
     const trkpts = xml.getElementsByTagName("trkpt");
-
     for (let i = 0; i < trkpts.length; i++) {
       const lat = parseFloat(trkpts[i].getAttribute("lat"));
       const lng = parseFloat(trkpts[i].getAttribute("lon"));
@@ -188,7 +199,6 @@
     return pts;
   }
 
-  // ===== 描画
   function render(index) {
     clearLayers(fogRects);
     clearLayers(clearRects);
@@ -198,19 +208,14 @@
     const currentDate = new Date(timeBuckets[index][0]);
 
     let visible;
-
     if (unit === 'minute' || unit === 'hour') {
-      // 同一日内のみ累積
-      visible = timeBuckets
-        .slice(0, index + 1)
+      visible = timeBuckets.slice(0, index + 1)
         .filter(([key]) => sameDay(new Date(key), currentDate));
     } else {
-      // 日・月はスナップショット
       visible = [timeBuckets[index]];
     }
 
     const countMap = new Map();
-
     visible.forEach(([_, pts]) => {
       pts.forEach(p => {
         const k = gridKey(p.lat, p.lng);
@@ -229,6 +234,7 @@
       );
     });
 
+    currentCenter = getCenterFromBuckets(visible);
     label.textContent = currentDate.toLocaleString();
   }
 
@@ -241,41 +247,34 @@
     render(slider.value);
   }
 
-  // ===== 自動ロード
   async function loadFromGAS() {
     try {
       const res = await fetch(GAS_URL);
       const files = await res.json();
-
       allPoints = [];
       files.forEach(f => allPoints.push(...parseGPX(f.content)));
-
-      if (allPoints.length === 0) {
-        status.textContent = "ログはありますが、点がありません";
-        return;
-      }
-
       status.textContent = `${files.length}ファイル / ${allPoints.length}点 読み込み完了`;
       rebuild();
-
-    } catch (e) {
-      console.error(e);
+    } catch {
       status.textContent = "ログの読み込みに失敗しました";
     }
   }
 
+  /* ===== スライダー操作中は地図を止める ===== */
+  slider.addEventListener('touchstart', () => map.dragging.disable());
+  slider.addEventListener('touchend', () => map.dragging.enable());
   slider.addEventListener('input', () => render(Number(slider.value)));
+
   unitSelect.addEventListener('change', rebuild);
+
+  jumpBtn.addEventListener('click', () => {
+    if (currentCenter) map.setView(currentCenter, map.getZoom(), { animate: true });
+  });
 
   map.on('moveend', () => {
     if (!slider.disabled) render(Number(slider.value));
-    else {
-      clearLayers(fogRects);
-      drawFog();
-    }
   });
 
-  // ===== 起動
   drawFog();
   loadFromGAS();
 </script>
