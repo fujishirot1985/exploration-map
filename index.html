@@ -38,7 +38,6 @@
       font-size: 14px;
     }
 
-    /* ===== スライダー操作性改善 ===== */
     input[type="range"] {
       width: 96%;
       margin: 0 auto;
@@ -84,6 +83,12 @@
   </div>
 
   <div class="row">
+    <select id="dateSelect" disabled>
+      <option value="">日付を選択</option>
+    </select>
+  </div>
+
+  <div class="row">
     <input type="range" id="timeSlider" min="0" max="0" value="0" disabled />
     <span id="dateLabel">読み込み中…</span>
   </div>
@@ -125,11 +130,13 @@
   let fogRects = [];
   let clearRects = [];
   let currentCenter = null;
+  let selectedDate = null;
 
   const slider = document.getElementById('timeSlider');
   const label  = document.getElementById('dateLabel');
   const status = document.getElementById('status');
   const unitSelect = document.getElementById('unitSelect');
+  const dateSelect = document.getElementById('dateSelect');
   const jumpBtn = document.getElementById('jumpBtn');
 
   function clearLayers(arr) {
@@ -151,6 +158,16 @@
     }
   }
 
+  /* ===== JSTローカル日付 ===== */
+  function localDateString(iso) {
+    const d = new Date(iso);
+    return [
+      d.getFullYear(),
+      String(d.getMonth() + 1).padStart(2, '0'),
+      String(d.getDate()).padStart(2, '0')
+    ].join('-');
+  }
+
   function makeTimeKey(iso, unit) {
     const d = new Date(iso);
     if (unit === 'minute') d.setSeconds(0, 0);
@@ -160,9 +177,9 @@
     return d.toISOString();
   }
 
-  function buildBuckets(unit) {
+  function buildBuckets(unit, points = allPoints) {
     const mapBuckets = new Map();
-    allPoints.forEach(p => {
+    points.forEach(p => {
       const key = makeTimeKey(p.time, unit);
       if (!mapBuckets.has(key)) mapBuckets.set(key, []);
       mapBuckets.get(key).push(p);
@@ -238,12 +255,55 @@
     label.textContent = currentDate.toLocaleString();
   }
 
+  function getAvailableDates() {
+    const set = new Set();
+    allPoints.forEach(p => set.add(localDateString(p.time)));
+    return Array.from(set).sort();
+  }
+
+  function buildDateSelect() {
+    dateSelect.innerHTML = '<option value="">日付を選択</option>';
+    getAvailableDates().forEach(d => {
+      const opt = document.createElement('option');
+      opt.value = d;
+      opt.textContent = d;
+      dateSelect.appendChild(opt);
+    });
+  }
+
   function rebuild() {
-    timeBuckets = buildBuckets(unitSelect.value);
+    const unit = unitSelect.value;
+    const needsDate = (unit === 'minute' || unit === 'hour');
+
+    dateSelect.disabled = !needsDate;
+
+    if (needsDate && !selectedDate) {
+      slider.disabled = true;
+      label.textContent = '日付を選択してください';
+      clearLayers(clearRects);
+      return;
+    }
+
+    let targetPoints = allPoints;
+    if (needsDate) {
+      targetPoints = allPoints.filter(
+        p => localDateString(p.time) === selectedDate
+      );
+    }
+
+    timeBuckets = buildBuckets(unit, targetPoints);
+
+    if (!timeBuckets.length) {
+      slider.disabled = true;
+      label.textContent = 'ログなし';
+      return;
+    }
+
     slider.min = 0;
     slider.max = timeBuckets.length - 1;
     slider.value = slider.max;
     slider.disabled = false;
+
     render(slider.value);
   }
 
@@ -254,18 +314,23 @@
       allPoints = [];
       files.forEach(f => allPoints.push(...parseGPX(f.content)));
       status.textContent = `${files.length}ファイル / ${allPoints.length}点 読み込み完了`;
+      buildDateSelect();
       rebuild();
     } catch {
       status.textContent = "ログの読み込みに失敗しました";
     }
   }
 
-  /* ===== スライダー操作中は地図を止める ===== */
   slider.addEventListener('touchstart', () => map.dragging.disable());
   slider.addEventListener('touchend', () => map.dragging.enable());
   slider.addEventListener('input', () => render(Number(slider.value)));
 
   unitSelect.addEventListener('change', rebuild);
+
+  dateSelect.addEventListener('change', () => {
+    selectedDate = dateSelect.value || null;
+    rebuild();
+  });
 
   jumpBtn.addEventListener('click', () => {
     if (currentCenter) map.setView(currentCenter, map.getZoom(), { animate: true });
