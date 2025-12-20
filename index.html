@@ -77,8 +77,10 @@
     <select id="unitSelect">
       <option value="minute">分（1分）</option>
       <option value="hour">時間</option>
-      <option value="day" selected>日</option>
+      <option value="day">日</option>
+      <option value="day_sum">日（累計）</option>
       <option value="month">月</option>
+      <option value="month_sum">月（累計）</option>
     </select>
   </div>
 
@@ -158,22 +160,19 @@
     }
   }
 
-  /* ===== JSTローカル日付 ===== */
   function localDateString(iso) {
     const d = new Date(iso);
-    return [
-      d.getFullYear(),
-      String(d.getMonth() + 1).padStart(2, '0'),
-      String(d.getDate()).padStart(2, '0')
-    ].join('-');
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
   }
 
   function makeTimeKey(iso, unit) {
     const d = new Date(iso);
     if (unit === 'minute') d.setSeconds(0, 0);
     if (unit === 'hour')   d.setMinutes(0, 0, 0);
-    if (unit === 'day')    d.setHours(0, 0, 0, 0);
-    if (unit === 'month') { d.setDate(1); d.setHours(0, 0, 0, 0); }
+    if (unit === 'day' || unit === 'day_sum') d.setHours(0, 0, 0, 0);
+    if (unit === 'month' || unit === 'month_sum') {
+      d.setDate(1); d.setHours(0, 0, 0, 0);
+    }
     return d.toISOString();
   }
 
@@ -187,50 +186,22 @@
     return Array.from(mapBuckets.entries()).sort((a, b) => a[0].localeCompare(b[0]));
   }
 
-  function sameDay(a, b) {
-    return a.getFullYear() === b.getFullYear() &&
-           a.getMonth() === b.getMonth() &&
-           a.getDate() === b.getDate();
-  }
-
-  function getCenterFromBuckets(buckets) {
-    let lat = 0, lng = 0, count = 0;
-    buckets.forEach(([_, pts]) => {
-      pts.forEach(p => { lat += p.lat; lng += p.lng; count++; });
-    });
-    return count ? [lat / count, lng / count] : null;
-  }
-
-  function parseGPX(text) {
-    const pts = [];
-    const xml = new DOMParser().parseFromString(text, "application/xml");
-    const trkpts = xml.getElementsByTagName("trkpt");
-    for (let i = 0; i < trkpts.length; i++) {
-      const lat = parseFloat(trkpts[i].getAttribute("lat"));
-      const lng = parseFloat(trkpts[i].getAttribute("lon"));
-      const timeEl = trkpts[i].getElementsByTagName("time")[0];
-      if (!isNaN(lat) && !isNaN(lng) && timeEl) {
-        pts.push({ lat, lng, time: timeEl.textContent });
-      }
-    }
-    return pts;
-  }
-
   function render(index) {
     clearLayers(fogRects);
     clearLayers(clearRects);
     drawFog();
 
     const unit = unitSelect.value;
-    const currentDate = new Date(timeBuckets[index][0]);
 
-    let visible;
-    if (unit === 'minute' || unit === 'hour') {
-      visible = timeBuckets.slice(0, index + 1)
-        .filter(([key]) => sameDay(new Date(key), currentDate));
-    } else {
-      visible = [timeBuckets[index]];
-    }
+    const isCumulative =
+      unit === 'minute' ||
+      unit === 'hour' ||
+      unit === 'day_sum' ||
+      unit === 'month_sum';
+
+    const visible = isCumulative
+      ? timeBuckets.slice(0, index + 1)
+      : [timeBuckets[index]];
 
     const countMap = new Map();
     visible.forEach(([_, pts]) => {
@@ -251,8 +222,8 @@
       );
     });
 
-    currentCenter = getCenterFromBuckets(visible);
-    label.textContent = currentDate.toLocaleString();
+    currentCenter = null;
+    label.textContent = new Date(timeBuckets[index][0]).toLocaleString();
   }
 
   function getAvailableDates() {
@@ -277,18 +248,9 @@
 
     dateSelect.disabled = !needsDate;
 
-    if (needsDate && !selectedDate) {
-      slider.disabled = true;
-      label.textContent = '日付を選択してください';
-      clearLayers(clearRects);
-      return;
-    }
-
     let targetPoints = allPoints;
-    if (needsDate) {
-      targetPoints = allPoints.filter(
-        p => localDateString(p.time) === selectedDate
-      );
+    if (needsDate && selectedDate) {
+      targetPoints = allPoints.filter(p => localDateString(p.time) === selectedDate);
     }
 
     timeBuckets = buildBuckets(unit, targetPoints);
@@ -301,44 +263,38 @@
 
     slider.min = 0;
     slider.max = timeBuckets.length - 1;
-    slider.value = slider.max;
+    slider.value = slider.min;   // ★ 左端スタート
     slider.disabled = false;
 
     render(slider.value);
   }
 
   async function loadFromGAS() {
-    try {
-      const res = await fetch(GAS_URL);
-      const files = await res.json();
-      allPoints = [];
-      files.forEach(f => allPoints.push(...parseGPX(f.content)));
-      status.textContent = `${files.length}ファイル / ${allPoints.length}点 読み込み完了`;
-      buildDateSelect();
-      rebuild();
-    } catch {
-      status.textContent = "ログの読み込みに失敗しました";
-    }
+    const res = await fetch(GAS_URL);
+    const files = await res.json();
+    allPoints = [];
+    files.forEach(f => allPoints.push(...parseGPX(f.content)));
+    status.textContent = `${files.length}ファイル / ${allPoints.length}点`;
+    buildDateSelect();
+    rebuild();
   }
 
-  slider.addEventListener('touchstart', () => map.dragging.disable());
-  slider.addEventListener('touchend', () => map.dragging.enable());
+  function parseGPX(text) {
+    const pts = [];
+    const xml = new DOMParser().parseFromString(text, "application/xml");
+    const trkpts = xml.getElementsByTagName("trkpt");
+    for (let i = 0; i < trkpts.length; i++) {
+      const lat = parseFloat(trkpts[i].getAttribute("lat"));
+      const lng = parseFloat(trkpts[i].getAttribute("lon"));
+      const timeEl = trkpts[i].getElementsByTagName("time")[0];
+      if (timeEl) pts.push({ lat, lng, time: timeEl.textContent });
+    }
+    return pts;
+  }
+
   slider.addEventListener('input', () => render(Number(slider.value)));
-
   unitSelect.addEventListener('change', rebuild);
-
-  dateSelect.addEventListener('change', () => {
-    selectedDate = dateSelect.value || null;
-    rebuild();
-  });
-
-  jumpBtn.addEventListener('click', () => {
-    if (currentCenter) map.setView(currentCenter, map.getZoom(), { animate: true });
-  });
-
-  map.on('moveend', () => {
-    if (!slider.disabled) render(Number(slider.value));
-  });
+  dateSelect.addEventListener('change', () => { selectedDate = dateSelect.value; rebuild(); });
 
   drawFog();
   loadFromGAS();
