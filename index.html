@@ -46,10 +46,37 @@
       background: #fff; border: none;
     }
     #dateLabel {
-      font-size: 14px; color: #fff; font-weight: bold;
-      margin-top: 6px; display: block;
+      font-size: 14px;
+      color: #fff;
+      font-weight: bold;
+      margin-top: 6px;
+    }
+    #timeIcon {
+      margin-right: 6px;
+      font-size: 16px;
     }
     #status { font-size: 12px; color: #888; }
+
+    .row.flex {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    #dateSelect { flex: 1 1 auto; }
+    button {
+      padding: 10px 12px;
+      background: #111;
+      color: #ddd;
+      border: 1px solid #333;
+      border-radius: 8px;
+      font-size: 14px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    button:disabled {
+      opacity: 0.5;
+      cursor: default;
+    }
   </style>
 </head>
 <body>
@@ -68,14 +95,16 @@
     </select>
   </div>
 
-  <div class="row">
+  <div class="row flex">
     <select id="dateSelect" disabled>
       <option value="">日付を選択</option>
     </select>
+    <button id="moveBtn" disabled>ログ位置へ</button>
   </div>
 
   <div class="row">
     <input type="range" id="timeSlider" min="0" max="0" value="0" disabled />
+    <span id="timeIcon"></span>
     <span id="dateLabel">読み込み中…</span>
   </div>
 
@@ -97,15 +126,27 @@
   let footprintMarkers = [];
   let selectedDate = null;
 
+  let logs = [];
+  let selectedLogId = "";
+
   const slider = document.getElementById('timeSlider');
   const label  = document.getElementById('dateLabel');
+  const timeIcon = document.getElementById('timeIcon');
   const status = document.getElementById('status');
   const unitSelect = document.getElementById('unitSelect');
   const dateSelect = document.getElementById('dateSelect');
+  const moveBtn = document.getElementById('moveBtn');
 
   function clearLayers(arr) {
     arr.forEach(l => map.removeLayer(l));
     arr.length = 0;
+  }
+
+  function timeIconFromHour(h) {
+    if (h >= 5 && h < 9) return "🌅";
+    if (h >= 9 && h < 16) return "☀️";
+    if (h >= 16 && h < 19) return "🌆";
+    return "🌙";
   }
 
   function localDateString(iso) {
@@ -116,10 +157,11 @@
   function makeTimeKey(iso, unit) {
     const d = new Date(iso);
     if (unit === 'minute') d.setSeconds(0, 0);
-    if (unit === 'hour')   d.setMinutes(0, 0, 0);
+    if (unit === 'hour') d.setMinutes(0, 0, 0);
     if (unit === 'day' || unit === 'day_sum') d.setHours(0, 0, 0, 0);
     if (unit === 'month' || unit === 'month_sum') {
-      d.setDate(1); d.setHours(0, 0, 0, 0);
+      d.setDate(1);
+      d.setHours(0, 0, 0, 0);
     }
     return d.toISOString();
   }
@@ -131,17 +173,17 @@
       if (!mapBuckets.has(key)) mapBuckets.set(key, []);
       mapBuckets.get(key).push(p);
     });
-    return Array.from(mapBuckets.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+    return Array.from(mapBuckets.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]));
   }
 
-  /* 🐾 肉球SVG */
   const footprintSvg = `
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-    <circle cx="6" cy="7" r="2" fill="#444"/>
-    <circle cx="10" cy="5" r="2" fill="#444"/>
-    <circle cx="14" cy="5" r="2" fill="#444"/>
-    <circle cx="18" cy="7" r="2" fill="#444"/>
-    <ellipse cx="12" cy="14" rx="5" ry="4" fill="#444"/>
+  <circle cx="6" cy="7" r="2" fill="#444"/>
+  <circle cx="10" cy="5" r="2" fill="#444"/>
+  <circle cx="14" cy="5" r="2" fill="#444"/>
+  <circle cx="18" cy="7" r="2" fill="#444"/>
+  <ellipse cx="12" cy="14" rx="5" ry="4" fill="#444"/>
 </svg>
 `;
 
@@ -167,15 +209,14 @@
     return 2 * R * Math.asin(Math.sqrt(s));
   }
 
-  // ★ 縮尺ごとのエリア半径
   function areaRadiusByZoom(zoom) {
-    if (zoom >= 14) return 400;    // かなり近い
-    if (zoom >= 13) return 550;    // 市街地（あなたのベスト感）
-    if (zoom >= 12) return 800;    // 駅〜沿線
-    if (zoom >= 11) return 1200;   // 区
-    if (zoom >= 10) return 1600;   // 市
-    if (zoom >= 9)  return 2200;   // 広域
-    return 3000;                  // 県レベル
+    if (zoom >= 14) return 400;
+    if (zoom >= 13) return 550;
+    if (zoom >= 12) return 800;
+    if (zoom >= 11) return 1200;
+    if (zoom >= 10) return 1600;
+    if (zoom >= 9) return 2200;
+    return 3000;
   }
 
   function render(index) {
@@ -219,7 +260,6 @@
       });
 
       if (isRouteScale) {
-        // 道程モード
         sorted.forEach(p => {
           const t = new Date(p.time).getTime();
           if (!lastTime || t - lastTime >= FOOTPRINT_INTERVAL) {
@@ -230,7 +270,6 @@
           }
         });
       } else {
-        // エリアモード（複数）
         const areas = [];
         sorted.forEach(p => {
           let placed = false;
@@ -257,43 +296,65 @@
     label.textContent = new Date(timeBuckets[index][0]).toLocaleString();
   }
 
-  function getAvailableDates() {
-    const set = new Set();
-    allPoints.forEach(p => set.add(localDateString(p.time)));
-    return Array.from(set).sort();
-  }
-
-  function buildDateSelect() {
-    dateSelect.innerHTML = '<option value="">日付を選択</option>';
-    getAvailableDates().forEach(d => {
+  function buildDateSelectForLogs() {
+    dateSelect.innerHTML = '<option value="">ログを選択</option>';
+    logs.forEach(l => {
+      const d = new Date(l.startIso);
       const opt = document.createElement('option');
-      opt.value = d;
-      opt.textContent = d;
+      opt.value = l.id;
+      opt.textContent =
+        `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}〜`;
       dateSelect.appendChild(opt);
     });
+    if (selectedLogId) {
+      dateSelect.value = selectedLogId;
+    }
+  }
+
+  function moveToSelectedLog() {
+    const log = logs.find(l => l.id === selectedLogId);
+    if (!log || !log.firstLatLng) return;
+    map.setView(log.firstLatLng, map.getZoom(), { animate: true });
   }
 
   function rebuild() {
     const unit = unitSelect.value;
-    const needsDate = (unit === 'minute' || unit === 'hour');
-    dateSelect.disabled = !needsDate;
+    const logMode = unit === 'minute';
+
+    dateSelect.disabled = !(unit === 'minute' || unit === 'hour');
+    moveBtn.disabled = !(logMode && selectedLogId);
 
     let targetPoints = allPoints;
-    if (needsDate && selectedDate) {
-      targetPoints = allPoints.filter(p => localDateString(p.time) === selectedDate);
+
+    if (logMode) {
+      buildDateSelectForLogs();
+      if (selectedLogId) {
+        const log = logs.find(l => l.id === selectedLogId);
+        if (log) {
+          targetPoints = log.points;
+          timeIcon.textContent =
+            timeIconFromHour(new Date(log.startIso).getHours());
+        }
+      } else {
+        targetPoints = [];
+        timeIcon.textContent = "";
+      }
+    } else {
+      timeIcon.textContent = "";
     }
 
     timeBuckets = buildBuckets(unit, targetPoints);
 
     if (!timeBuckets.length) {
       slider.disabled = true;
-      label.textContent = 'ログなし';
+      label.textContent = logMode ? 'ログ未選択' : 'ログなし';
+      clearLayers(footprintMarkers);
       return;
     }
 
     slider.min = 0;
     slider.max = timeBuckets.length - 1;
-    slider.value = slider.min;
+    slider.value = 0;
     slider.disabled = false;
 
     render(slider.value);
@@ -302,10 +363,27 @@
   async function loadFromGAS() {
     const res = await fetch(GAS_URL);
     const files = await res.json();
+
     allPoints = [];
-    files.forEach(f => allPoints.push(...parseGPX(f.content)));
+    logs = [];
+
+    files.forEach((f, idx) => {
+      const pts = parseGPX(f.content);
+      if (!pts.length) return;
+
+      pts.sort((a, b) => new Date(a.time) - new Date(b.time));
+      allPoints.push(...pts);
+
+      logs.push({
+        id: `log_${idx}`,
+        startIso: pts[0].time,
+        points: pts,
+        firstLatLng: [pts[0].lat, pts[0].lng]
+      });
+    });
+
+    logs.sort((a, b) => new Date(a.startIso) - new Date(b.startIso));
     status.textContent = `${files.length}ファイル / ${allPoints.length}点`;
-    buildDateSelect();
     rebuild();
   }
 
@@ -323,12 +401,17 @@
   }
 
   slider.addEventListener('input', () => render(Number(slider.value)));
-  unitSelect.addEventListener('change', rebuild);
-  dateSelect.addEventListener('change', () => {
-    selectedDate = dateSelect.value;
+  unitSelect.addEventListener('change', () => {
+    if (unitSelect.value !== 'minute') selectedLogId = "";
     rebuild();
   });
-
+  dateSelect.addEventListener('change', () => {
+    if (unitSelect.value === 'minute') {
+      selectedLogId = dateSelect.value;
+    }
+    rebuild();
+  });
+  moveBtn.addEventListener('click', moveToSelectedLog);
   map.on('zoomend', () => {
     if (!slider.disabled) render(Number(slider.value));
   });
