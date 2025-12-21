@@ -15,9 +15,7 @@
       background: #111;
       font-family: -apple-system, BlinkMacSystemFont, sans-serif;
     }
-
     #map { height: 80%; }
-
     #ui {
       height: 20%;
       padding: 10px 14px;
@@ -25,9 +23,7 @@
       color: #ddd;
       box-sizing: border-box;
     }
-
     .row { margin-bottom: 8px; }
-
     select, input[type="range"] {
       width: 100%;
       padding: 10px;
@@ -37,35 +33,23 @@
       border-radius: 8px;
       font-size: 14px;
     }
-
     input[type="range"] {
       width: 96%;
       margin: 0 auto;
       display: block;
       height: 28px;
     }
-
     input[type="range"]::-webkit-slider-thumb {
       -webkit-appearance: none;
-      width: 28px;
-      height: 28px;
+      width: 28px; height: 28px;
       border-radius: 50%;
-      background: #fff;
-      border: none;
+      background: #fff; border: none;
     }
-
     #dateLabel {
-      font-size: 14px;
-      color: #fff;
-      font-weight: bold;
-      margin-top: 6px;
-      display: block;
+      font-size: 14px; color: #fff; font-weight: bold;
+      margin-top: 6px; display: block;
     }
-
-    #status {
-      font-size: 12px;
-      color: #888;
-    }
+    #status { font-size: 12px; color: #888; }
   </style>
 </head>
 <body>
@@ -135,8 +119,7 @@
     if (unit === 'hour')   d.setMinutes(0, 0, 0);
     if (unit === 'day' || unit === 'day_sum') d.setHours(0, 0, 0, 0);
     if (unit === 'month' || unit === 'month_sum') {
-      d.setDate(1);
-      d.setHours(0, 0, 0, 0);
+      d.setDate(1); d.setHours(0, 0, 0, 0);
     }
     return d.toISOString();
   }
@@ -162,7 +145,7 @@
 </svg>
 `;
 
-  /* 日キー（ISO文字列）から安定した色を作る */
+  /* 日（累計）用：日キーから安定した色 */
   function colorFromDayKey(dayKey) {
     let hash = 0;
     for (let i = 0; i < dayKey.length; i++) {
@@ -187,7 +170,10 @@
       ? timeBuckets.slice(0, index + 1)
       : [timeBuckets[index]];
 
-    const FOOTPRINT_INTERVAL = 60 * 1000;
+    const zoom = map.getZoom();
+    const isRouteScale = zoom >= 14; // ★ ここが切替の肝
+
+    const FOOTPRINT_INTERVAL = 60 * 1000; // 1分
     let lastTime = null;
 
     visible.forEach(([dayKey, pts]) => {
@@ -203,25 +189,38 @@
       const icon = L.icon({
         iconUrl:
           'data:image/svg+xml;base64,' +
-          btoa(
-            footprintSvg.replace(/fill="#444"/g, `fill="${color}"`)
-          ),
+          btoa(footprintSvg.replace(/fill="#444"/g, `fill="${color}"`)),
         iconSize: [18, 18],
         iconAnchor: [9, 9]
       });
 
-      sorted.forEach(p => {
-        const t = new Date(p.time).getTime();
-        if (!lastTime || t - lastTime >= FOOTPRINT_INTERVAL) {
-          lastTime = t;
-          footprintMarkers.push(
-            L.marker([p.lat, p.lng], {
-              icon,
-              interactive: false
-            }).addTo(map)
-          );
-        }
-      });
+      if (isRouteScale) {
+        // 🔍 道程モード：今まで通り
+        sorted.forEach(p => {
+          const t = new Date(p.time).getTime();
+          if (!lastTime || t - lastTime >= FOOTPRINT_INTERVAL) {
+            lastTime = t;
+            footprintMarkers.push(
+              L.marker([p.lat, p.lng], {
+                icon, interactive: false
+              }).addTo(map)
+            );
+          }
+        });
+      } else {
+        // 🗺 エリアモード：その日（そのバケット）の代表点（重心）
+        if (!sorted.length) return;
+        const lat =
+          sorted.reduce((s, p) => s + p.lat, 0) / sorted.length;
+        const lng =
+          sorted.reduce((s, p) => s + p.lng, 0) / sorted.length;
+
+        footprintMarkers.push(
+          L.marker([lat, lng], {
+            icon, interactive: false
+          }).addTo(map)
+        );
+      }
     });
 
     label.textContent = new Date(timeBuckets[index][0]).toLocaleString();
@@ -246,7 +245,6 @@
   function rebuild() {
     const unit = unitSelect.value;
     const needsDate = (unit === 'minute' || unit === 'hour');
-
     dateSelect.disabled = !needsDate;
 
     let targetPoints = allPoints;
@@ -298,6 +296,11 @@
   dateSelect.addEventListener('change', () => {
     selectedDate = dateSelect.value;
     rebuild();
+  });
+
+  // ズーム操作でも再描画
+  map.on('zoomend', () => {
+    if (!slider.disabled) render(Number(slider.value));
   });
 
   loadFromGAS();
