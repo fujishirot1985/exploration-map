@@ -24,7 +24,7 @@
       box-sizing: border-box;
     }
     .row { margin-bottom: 8px; }
-    select, input[type="range"] {
+    select, input[type="range"], input[type="text"] {
       width: 100%;
       padding: 10px;
       background: #111;
@@ -63,19 +63,11 @@
       align-items: center;
     }
     #dateSelect { flex: 1 1 auto; }
-    button {
-      padding: 10px 12px;
-      background: #111;
-      color: #ddd;
-      border: 1px solid #333;
-      border-radius: 8px;
-      font-size: 14px;
-      cursor: pointer;
-      white-space: nowrap;
-    }
-    button:disabled {
-      opacity: 0.5;
-      cursor: default;
+
+    /* メモ入力 */
+    #memoInput {
+      font-size: 13px;
+      padding: 8px 10px;
     }
   </style>
 </head>
@@ -108,6 +100,15 @@
     <span id="dateLabel">読み込み中…</span>
   </div>
 
+  <!-- メモ入力欄 -->
+  <div class="row" id="memoRow" style="display:none;">
+    <input
+      type="text"
+      id="memoInput"
+      placeholder="メモを入力（例：〇〇に行った）"
+    />
+  </div>
+
   <div id="status">クラウドからログを読み込んでいます</div>
 </div>
 
@@ -129,6 +130,10 @@
   let logs = [];
   let selectedLogId = "";
 
+  /* メモ保存 */
+  const MEMO_KEY = "exploration_log_memos";
+  let logMemos = JSON.parse(localStorage.getItem(MEMO_KEY) || "{}");
+
   const slider = document.getElementById('timeSlider');
   const label  = document.getElementById('dateLabel');
   const timeIcon = document.getElementById('timeIcon');
@@ -136,17 +141,31 @@
   const unitSelect = document.getElementById('unitSelect');
   const dateSelect = document.getElementById('dateSelect');
   const moveBtn = document.getElementById('moveBtn');
+  const memoRow = document.getElementById('memoRow');
+  const memoInput = document.getElementById('memoInput');
+
+  function saveMemo() {
+    if (!selectedLogId) return;
+    const v = memoInput.value.trim();
+    if (v) {
+      logMemos[selectedLogId] = v;
+    } else {
+      delete logMemos[selectedLogId];
+    }
+    localStorage.setItem(MEMO_KEY, JSON.stringify(logMemos));
+  }
+
+  memoInput.addEventListener('blur', saveMemo);
+  memoInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      saveMemo();
+      memoInput.blur();
+    }
+  });
 
   function clearLayers(arr) {
     arr.forEach(l => map.removeLayer(l));
     arr.length = 0;
-  }
-
-  function timeIconFromHour(h) {
-    if (h >= 5 && h < 9) return "🌅";
-    if (h >= 9 && h < 16) return "☀️";
-    if (h >= 16 && h < 19) return "🌆";
-    return "🌙";
   }
 
   function localDateString(iso) {
@@ -157,11 +176,10 @@
   function makeTimeKey(iso, unit) {
     const d = new Date(iso);
     if (unit === 'minute') d.setSeconds(0, 0);
-    if (unit === 'hour') d.setMinutes(0, 0, 0);
+    if (unit === 'hour')   d.setMinutes(0, 0, 0);
     if (unit === 'day' || unit === 'day_sum') d.setHours(0, 0, 0, 0);
     if (unit === 'month' || unit === 'month_sum') {
-      d.setDate(1);
-      d.setHours(0, 0, 0, 0);
+      d.setDate(1); d.setHours(0, 0, 0, 0);
     }
     return d.toISOString();
   }
@@ -173,19 +191,17 @@
       if (!mapBuckets.has(key)) mapBuckets.set(key, []);
       mapBuckets.get(key).push(p);
     });
-    return Array.from(mapBuckets.entries())
-      .sort((a, b) => a[0].localeCompare(b[0]));
+    return Array.from(mapBuckets.entries()).sort((a, b) => a[0].localeCompare(b[0]));
   }
 
-  const footprintSvg = `
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-  <circle cx="6" cy="7" r="2" fill="#444"/>
-  <circle cx="10" cy="5" r="2" fill="#444"/>
-  <circle cx="14" cy="5" r="2" fill="#444"/>
-  <circle cx="18" cy="7" r="2" fill="#444"/>
-  <ellipse cx="12" cy="14" rx="5" ry="4" fill="#444"/>
-</svg>
-`;
+  const footprintSvg =
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">' +
+  '<circle cx="6" cy="7" r="2" fill="#444"/>' +
+  '<circle cx="10" cy="5" r="2" fill="#444"/>' +
+  '<circle cx="14" cy="5" r="2" fill="#444"/>' +
+  '<circle cx="18" cy="7" r="2" fill="#444"/>' +
+  '<ellipse cx="12" cy="14" rx="5" ry="4" fill="#444"/>' +
+  '</svg>';
 
   function colorFromDayKey(dayKey) {
     let hash = 0;
@@ -215,8 +231,15 @@
     if (zoom >= 12) return 800;
     if (zoom >= 11) return 1200;
     if (zoom >= 10) return 1600;
-    if (zoom >= 9) return 2200;
+    if (zoom >= 9)  return 2200;
     return 3000;
+  }
+
+  function timeIconFromHour(h) {
+    if (h >= 5 && h < 9)  return "🌅";
+    if (h >= 9 && h < 16) return "☀️";
+    if (h >= 16 && h < 19) return "🌆";
+    return "🌙";
   }
 
   function render(index) {
@@ -296,6 +319,18 @@
     label.textContent = new Date(timeBuckets[index][0]).toLocaleString();
   }
 
+  function buildDateSelectForDates() {
+    dateSelect.innerHTML = '<option value="">日付を選択</option>';
+    const set = new Set();
+    allPoints.forEach(p => set.add(localDateString(p.time)));
+    Array.from(set).sort().forEach(d => {
+      const opt = document.createElement('option');
+      opt.value = d;
+      opt.textContent = d;
+      dateSelect.appendChild(opt);
+    });
+  }
+
   function buildDateSelectForLogs() {
     dateSelect.innerHTML = '<option value="">ログを選択</option>';
     logs.forEach(l => {
@@ -306,14 +341,12 @@
         `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}〜`;
       dateSelect.appendChild(opt);
     });
-    if (selectedLogId) {
-      dateSelect.value = selectedLogId;
-    }
+    if (selectedLogId) dateSelect.value = selectedLogId;
   }
 
   function moveToSelectedLog() {
     const log = logs.find(l => l.id === selectedLogId);
-    if (!log || !log.firstLatLng) return;
+    if (!log) return;
     map.setView(log.firstLatLng, map.getZoom(), { animate: true });
   }
 
@@ -326,6 +359,8 @@
 
     let targetPoints = allPoints;
 
+    memoRow.style.display = (logMode && selectedLogId) ? "block" : "none";
+
     if (logMode) {
       buildDateSelectForLogs();
       if (selectedLogId) {
@@ -334,11 +369,19 @@
           targetPoints = log.points;
           timeIcon.textContent =
             timeIconFromHour(new Date(log.startIso).getHours());
+          memoInput.value = logMemos[selectedLogId] || "";
         }
       } else {
         targetPoints = [];
         timeIcon.textContent = "";
+        memoInput.value = "";
       }
+    } else if (unit === 'hour') {
+      buildDateSelectForDates();
+      if (selectedDate) {
+        targetPoints = allPoints.filter(p => localDateString(p.time) === selectedDate);
+      }
+      timeIcon.textContent = "";
     } else {
       timeIcon.textContent = "";
     }
@@ -347,7 +390,7 @@
 
     if (!timeBuckets.length) {
       slider.disabled = true;
-      label.textContent = logMode ? 'ログ未選択' : 'ログなし';
+      label.textContent = 'ログなし';
       clearLayers(footprintMarkers);
       return;
     }
@@ -408,6 +451,8 @@
   dateSelect.addEventListener('change', () => {
     if (unitSelect.value === 'minute') {
       selectedLogId = dateSelect.value;
+    } else {
+      selectedDate = dateSelect.value;
     }
     rebuild();
   });
