@@ -28,7 +28,7 @@
 
     .row { margin-bottom: 8px; }
 
-    select, input[type="range"], button {
+    select, input[type="range"] {
       width: 100%;
       padding: 10px;
       background: #111;
@@ -95,10 +95,6 @@
     <span id="dateLabel">読み込み中…</span>
   </div>
 
-  <div class="row">
-    <button id="jumpBtn">ログに寄せる</button>
-  </div>
-
   <div id="status">クラウドからログを読み込んでいます</div>
 </div>
 
@@ -112,26 +108,9 @@
     attribution: '© OpenStreetMap'
   }).addTo(map);
 
-  const GRID_LAT = 0.0003;
-  const GRID_LNG = 0.0004;
-
-  function gridKey(lat, lng) {
-    return `${Math.floor(lat / GRID_LAT)}_${Math.floor(lng / GRID_LNG)}`;
-  }
-
-  function gridBounds(key) {
-    const [x, y] = key.split('_').map(Number);
-    return [
-      [x * GRID_LAT, y * GRID_LNG],
-      [(x + 1) * GRID_LAT, (y + 1) * GRID_LNG]
-    ];
-  }
-
   let allPoints = [];
   let timeBuckets = [];
-  let fogRects = [];
-  let clearRects = [];
-  let currentCenter = null;
+  let footprintMarkers = [];
   let selectedDate = null;
 
   const slider = document.getElementById('timeSlider');
@@ -139,25 +118,10 @@
   const status = document.getElementById('status');
   const unitSelect = document.getElementById('unitSelect');
   const dateSelect = document.getElementById('dateSelect');
-  const jumpBtn = document.getElementById('jumpBtn');
 
   function clearLayers(arr) {
     arr.forEach(l => map.removeLayer(l));
     arr.length = 0;
-  }
-
-  function drawFog() {
-    const b = map.getBounds();
-    for (let x = Math.floor(b.getSouth() / GRID_LAT); x <= Math.floor(b.getNorth() / GRID_LAT); x++) {
-      for (let y = Math.floor(b.getWest() / GRID_LNG); y <= Math.floor(b.getEast() / GRID_LNG); y++) {
-        fogRects.push(
-          L.rectangle(
-            [[x * GRID_LAT, y * GRID_LNG], [(x + 1) * GRID_LAT, (y + 1) * GRID_LNG]],
-            { color: null, fillColor: '#0c1220', fillOpacity: 0.55, weight: 0 }
-          ).addTo(map)
-        );
-      }
-    }
   }
 
   function localDateString(iso) {
@@ -171,7 +135,8 @@
     if (unit === 'hour')   d.setMinutes(0, 0, 0);
     if (unit === 'day' || unit === 'day_sum') d.setHours(0, 0, 0, 0);
     if (unit === 'month' || unit === 'month_sum') {
-      d.setDate(1); d.setHours(0, 0, 0, 0);
+      d.setDate(1);
+      d.setHours(0, 0, 0, 0);
     }
     return d.toISOString();
   }
@@ -186,13 +151,32 @@
     return Array.from(mapBuckets.entries()).sort((a, b) => a[0].localeCompare(b[0]));
   }
 
+  /* 🐾 肉球SVG（ベース） */
+  const footprintSvg = `
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <circle cx="6" cy="7" r="2" fill="#444"/>
+  <circle cx="10" cy="5" r="2" fill="#444"/>
+  <circle cx="14" cy="5" r="2" fill="#444"/>
+  <circle cx="18" cy="7" r="2" fill="#444"/>
+  <ellipse cx="12" cy="14" rx="5" ry="4" fill="#444"/>
+</svg>
+`;
+
+  /* 日キー（ISO文字列）から安定した色を作る */
+  function colorFromDayKey(dayKey) {
+    let hash = 0;
+    for (let i = 0; i < dayKey.length; i++) {
+      hash = (hash << 5) - hash + dayKey.charCodeAt(i);
+      hash |= 0;
+    }
+    const hue = Math.abs(hash) % 360;
+    return `hsl(${hue}, 40%, 45%)`;
+  }
+
   function render(index) {
-    clearLayers(fogRects);
-    clearLayers(clearRects);
-    drawFog();
+    clearLayers(footprintMarkers);
 
     const unit = unitSelect.value;
-
     const isCumulative =
       unit === 'minute' ||
       unit === 'hour' ||
@@ -203,26 +187,43 @@
       ? timeBuckets.slice(0, index + 1)
       : [timeBuckets[index]];
 
-    const countMap = new Map();
-    visible.forEach(([_, pts]) => {
-      pts.forEach(p => {
-        const k = gridKey(p.lat, p.lng);
-        countMap.set(k, (countMap.get(k) || 0) + 1);
+    const FOOTPRINT_INTERVAL = 60 * 1000;
+    let lastTime = null;
+
+    visible.forEach(([dayKey, pts]) => {
+      const sorted = pts.slice().sort(
+        (a, b) => new Date(a.time) - new Date(b.time)
+      );
+
+      const color =
+        unit === 'day_sum'
+          ? colorFromDayKey(dayKey)
+          : '#444';
+
+      const icon = L.icon({
+        iconUrl:
+          'data:image/svg+xml;base64,' +
+          btoa(
+            footprintSvg.replace(/fill="#444"/g, `fill="${color}"`)
+          ),
+        iconSize: [18, 18],
+        iconAnchor: [9, 9]
+      });
+
+      sorted.forEach(p => {
+        const t = new Date(p.time).getTime();
+        if (!lastTime || t - lastTime >= FOOTPRINT_INTERVAL) {
+          lastTime = t;
+          footprintMarkers.push(
+            L.marker([p.lat, p.lng], {
+              icon,
+              interactive: false
+            }).addTo(map)
+          );
+        }
       });
     });
 
-    countMap.forEach((count, k) => {
-      clearRects.push(
-        L.rectangle(gridBounds(k), {
-          color: null,
-          fillColor: '#f5f6f7',
-          fillOpacity: Math.min(0.6, 0.3 + count * 0.05),
-          weight: 0
-        }).addTo(map)
-      );
-    });
-
-    currentCenter = null;
     label.textContent = new Date(timeBuckets[index][0]).toLocaleString();
   }
 
@@ -263,7 +264,7 @@
 
     slider.min = 0;
     slider.max = timeBuckets.length - 1;
-    slider.value = slider.min;   // ★ 左端スタート
+    slider.value = slider.min;
     slider.disabled = false;
 
     render(slider.value);
@@ -294,9 +295,11 @@
 
   slider.addEventListener('input', () => render(Number(slider.value)));
   unitSelect.addEventListener('change', rebuild);
-  dateSelect.addEventListener('change', () => { selectedDate = dateSelect.value; rebuild(); });
+  dateSelect.addEventListener('change', () => {
+    selectedDate = dateSelect.value;
+    rebuild();
+  });
 
-  drawFog();
   loadFromGAS();
 </script>
 
