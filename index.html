@@ -169,14 +169,13 @@
 
   // ★ 縮尺ごとのエリア半径
   function areaRadiusByZoom(zoom) {
-    if (zoom >= 14) return 400;   // 近い
-    if (zoom >= 13) return 500; 
-    if (zoom >= 12) return 700;   // 少し引き
-    if (zoom >= 11) return 1000;   // 少し引き
-    if (zoom >= 10) return 1400;   // 少し引き
-    if (zoom >= 9) return 1900;   // 少し引き
-    if (zoom >= 8) return 2500;   // 少し引き
-    return 3200;                 // だいぶ引き
+    if (zoom >= 14) return 400;    // かなり近い
+    if (zoom >= 13) return 550;    // 市街地（あなたのベスト感）
+    if (zoom >= 12) return 800;    // 駅〜沿線
+    if (zoom >= 11) return 1200;   // 区
+    if (zoom >= 10) return 1600;   // 市
+    if (zoom >= 9)  return 2200;   // 広域
+    return 3000;                  // 県レベル
   }
 
   function render(index) {
