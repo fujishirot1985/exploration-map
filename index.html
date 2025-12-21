@@ -134,18 +134,17 @@
     return Array.from(mapBuckets.entries()).sort((a, b) => a[0].localeCompare(b[0]));
   }
 
-  /* 🐾 肉球SVG（ベース） */
+  /* 🐾 肉球SVG */
   const footprintSvg = `
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-  <circle cx="6" cy="7" r="2" fill="#444"/>
-  <circle cx="10" cy="5" r="2" fill="#444"/>
-  <circle cx="14" cy="5" r="2" fill="#444"/>
-  <circle cx="18" cy="7" r="2" fill="#444"/>
-  <ellipse cx="12" cy="14" rx="5" ry="4" fill="#444"/>
+    <circle cx="6" cy="7" r="2" fill="#444"/>
+    <circle cx="10" cy="5" r="2" fill="#444"/>
+    <circle cx="14" cy="5" r="2" fill="#444"/>
+    <circle cx="18" cy="7" r="2" fill="#444"/>
+    <ellipse cx="12" cy="14" rx="5" ry="4" fill="#444"/>
 </svg>
 `;
 
-  /* 日（累計）用：日キーから安定した色 */
   function colorFromDayKey(dayKey) {
     let hash = 0;
     for (let i = 0; i < dayKey.length; i++) {
@@ -154,6 +153,26 @@
     }
     const hue = Math.abs(hash) % 360;
     return `hsl(${hue}, 40%, 45%)`;
+  }
+
+  function distance(a, b) {
+    const R = 6371000;
+    const toRad = x => x * Math.PI / 180;
+    const dLat = toRad(b.lat - a.lat);
+    const dLng = toRad(b.lng - a.lng);
+    const s =
+      Math.sin(dLat/2)**2 +
+      Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) *
+      Math.sin(dLng/2)**2;
+    return 2 * R * Math.asin(Math.sqrt(s));
+  }
+
+  // ★ 縮尺ごとのエリア半径
+  function areaRadiusByZoom(zoom) {
+    if (zoom >= 14) return 500;   // 近い
+    if (zoom >= 13) return 600; 
+    if (zoom >= 12) return 800;   // 少し引き
+    return 1000;                 // だいぶ引き
   }
 
   function render(index) {
@@ -171,9 +190,11 @@
       : [timeBuckets[index]];
 
     const zoom = map.getZoom();
-    const isRouteScale = zoom >= 14; // ★ ここが切替の肝
+    const isRouteScale = zoom >= 14;
 
-    const FOOTPRINT_INTERVAL = 60 * 1000; // 1分
+    const FOOTPRINT_INTERVAL = 60 * 1000;
+    const AREA_RADIUS = areaRadiusByZoom(zoom);
+
     let lastTime = null;
 
     visible.forEach(([dayKey, pts]) => {
@@ -195,31 +216,38 @@
       });
 
       if (isRouteScale) {
-        // 🔍 道程モード：今まで通り
+        // 道程モード
         sorted.forEach(p => {
           const t = new Date(p.time).getTime();
           if (!lastTime || t - lastTime >= FOOTPRINT_INTERVAL) {
             lastTime = t;
             footprintMarkers.push(
-              L.marker([p.lat, p.lng], {
-                icon, interactive: false
-              }).addTo(map)
+              L.marker([p.lat, p.lng], { icon, interactive:false }).addTo(map)
             );
           }
         });
       } else {
-        // 🗺 エリアモード：その日（そのバケット）の代表点（重心）
-        if (!sorted.length) return;
-        const lat =
-          sorted.reduce((s, p) => s + p.lat, 0) / sorted.length;
-        const lng =
-          sorted.reduce((s, p) => s + p.lng, 0) / sorted.length;
+        // エリアモード（複数）
+        const areas = [];
+        sorted.forEach(p => {
+          let placed = false;
+          for (const a of areas) {
+            if (distance(a, p) <= AREA_RADIUS) {
+              a.lat = (a.lat * a.count + p.lat) / (a.count + 1);
+              a.lng = (a.lng * a.count + p.lng) / (a.count + 1);
+              a.count++;
+              placed = true;
+              break;
+            }
+          }
+          if (!placed) areas.push({ lat:p.lat, lng:p.lng, count:1 });
+        });
 
-        footprintMarkers.push(
-          L.marker([lat, lng], {
-            icon, interactive: false
-          }).addTo(map)
-        );
+        areas.forEach(a => {
+          footprintMarkers.push(
+            L.marker([a.lat, a.lng], { icon, interactive:false }).addTo(map)
+          );
+        });
       }
     });
 
@@ -298,7 +326,6 @@
     rebuild();
   });
 
-  // ズーム操作でも再描画
   map.on('zoomend', () => {
     if (!slider.disabled) render(Number(slider.value));
   });
