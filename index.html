@@ -510,6 +510,10 @@
   dateSelect.addEventListener('change', () => {
     if (unitSelect.value === 'minute') {
       selectedLogId = dateSelect.value;
+      // ★ ログ選択と同時に開始地点へ
+      if (selectedLogId) {
+        moveToSelectedLog();
+      }
     } else {
       selectedDate = dateSelect.value;
     }
