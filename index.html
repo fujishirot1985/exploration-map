@@ -64,7 +64,7 @@
     }
     #dateSelect { flex: 1 1 auto; }
 
-    /* メモ入力 */
+    /* メモ表示（表示専用） */
     #memoInput {
       font-size: 13px;
       padding: 8px 10px;
@@ -100,12 +100,13 @@
     <span id="dateLabel">読み込み中…</span>
   </div>
 
-  <!-- メモ入力欄 -->
+  <!-- メモ表示欄 -->
   <div class="row" id="memoRow" style="display:none;">
     <input
       type="text"
       id="memoInput"
-      placeholder="メモを入力（例：〇〇に行った）"
+      placeholder="この散歩のメモ"
+      readonly
     />
   </div>
 
@@ -113,7 +114,7 @@
 </div>
 
 <script>
-  const GAS_URL = "https://script.google.com/macros/s/AKfycbxBS-OE16Ny3fCVxkm01DNk1v-D3eBfRvly00A3CSoZWBy3viwZKIiDz4ZXJVXJKDlx/exec";
+  const GAS_URL = "https://script.google.com/macros/s/AKfycbyueOmlLN-2vDHQcrjTIOBAGYMAQy-Vnd1DdXgYezd2mZ-RQ9m2LHySWdz3ox5-NpIa/exec";
 
   const map = L.map('map', { preferCanvas: true })
     .setView([35.7216, 140.1555], 15);
@@ -130,10 +131,6 @@
   let logs = [];
   let selectedLogId = "";
 
-  /* メモ保存 */
-  const MEMO_KEY = "exploration_log_memos";
-  let logMemos = JSON.parse(localStorage.getItem(MEMO_KEY) || "{}");
-
   const slider = document.getElementById('timeSlider');
   const label  = document.getElementById('dateLabel');
   const timeIcon = document.getElementById('timeIcon');
@@ -143,25 +140,6 @@
   const moveBtn = document.getElementById('moveBtn');
   const memoRow = document.getElementById('memoRow');
   const memoInput = document.getElementById('memoInput');
-
-  function saveMemo() {
-    if (!selectedLogId) return;
-    const v = memoInput.value.trim();
-    if (v) {
-      logMemos[selectedLogId] = v;
-    } else {
-      delete logMemos[selectedLogId];
-    }
-    localStorage.setItem(MEMO_KEY, JSON.stringify(logMemos));
-  }
-
-  memoInput.addEventListener('blur', saveMemo);
-  memoInput.addEventListener('keydown', e => {
-    if (e.key === 'Enter') {
-      saveMemo();
-      memoInput.blur();
-    }
-  });
 
   function clearLayers(arr) {
     arr.forEach(l => map.removeLayer(l));
@@ -369,7 +347,7 @@
           targetPoints = log.points;
           timeIcon.textContent =
             timeIconFromHour(new Date(log.startIso).getHours());
-          memoInput.value = logMemos[selectedLogId] || "";
+          memoInput.value = log.note || "";
         }
       } else {
         targetPoints = [];
@@ -382,8 +360,10 @@
         targetPoints = allPoints.filter(p => localDateString(p.time) === selectedDate);
       }
       timeIcon.textContent = "";
+      memoInput.value = "";
     } else {
       timeIcon.textContent = "";
+      memoInput.value = "";
     }
 
     timeBuckets = buildBuckets(unit, targetPoints);
@@ -421,7 +401,8 @@
         id: `log_${idx}`,
         startIso: pts[0].time,
         points: pts,
-        firstLatLng: [pts[0].lat, pts[0].lng]
+        firstLatLng: [pts[0].lat, pts[0].lng],
+        note: f.note || ""
       });
     });
 
