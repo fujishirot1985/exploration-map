@@ -254,11 +254,21 @@
 
   const footprintSvg =
   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">' +
-  '<circle cx="6" cy="7" r="2" fill="#444"/>' +
-  '<circle cx="10" cy="5" r="2" fill="#444"/>' +
-  '<circle cx="14" cy="5" r="2" fill="#444"/>' +
-  '<circle cx="18" cy="7" r="2" fill="#444"/>' +
-  '<ellipse cx="12" cy="14" rx="5" ry="4" fill="#444"/>' +
+
+    // --- ハロー（外側） ---
+    '<circle cx="6"  cy="7"  r="2.8" fill="rgba(255,255,255,0.8)"/>' +
+    '<circle cx="10" cy="5"  r="2.8" fill="rgba(255,255,255,0.8)"/>' +
+    '<circle cx="14" cy="5"  r="2.8" fill="rgba(255,255,255,0.8)"/>' +
+    '<circle cx="18" cy="7"  r="2.8" fill="rgba(255,255,255,0.8)"/>' +
+    '<ellipse cx="12" cy="14" rx="5.8" ry="4.6" fill="rgba(255,255,255,0.8)"/>' +
+
+    // --- 本体（内側） ---
+    '<circle cx="6"  cy="7"  r="2" fill="#444"/>' +
+    '<circle cx="10" cy="5"  r="2" fill="#444"/>' +
+    '<circle cx="14" cy="5"  r="2" fill="#444"/>' +
+    '<circle cx="18" cy="7"  r="2" fill="#444"/>' +
+    '<ellipse cx="12" cy="14" rx="5" ry="4" fill="#444"/>' +
+
   '</svg>';
 
   function colorFromDayKey(dayKey) {
