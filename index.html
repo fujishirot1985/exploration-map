@@ -15,7 +15,11 @@
       background: #111;
       font-family: -apple-system, BlinkMacSystemFont, sans-serif;
     }
-    #map { height: 80%; }
+
+    #map {
+      height: 80%;
+    }
+
     #ui {
       height: 20%;
       padding: 10px 14px;
@@ -23,8 +27,15 @@
       color: #ddd;
       box-sizing: border-box;
     }
-    .row { margin-bottom: 8px; }
-    select, input[type="range"], input[type="text"] {
+
+    .row {
+      margin-bottom: 8px;
+    }
+
+    select,
+    input[type="range"],
+    input[type="text"],
+    button {
       width: 100%;
       padding: 10px;
       background: #111;
@@ -32,36 +43,56 @@
       border: 1px solid #333;
       border-radius: 8px;
       font-size: 14px;
+      box-sizing: border-box;
     }
+
     input[type="range"] {
       width: 96%;
       margin: 0 auto;
       display: block;
       height: 28px;
     }
+
     input[type="range"]::-webkit-slider-thumb {
       -webkit-appearance: none;
-      width: 28px; height: 28px;
+      width: 28px;
+      height: 28px;
       border-radius: 50%;
-      background: #fff; border: none;
+      background: #fff;
+      border: none;
     }
+
+    /* ===== ラベル・時間表示 ===== */
+
     #dateLabel {
       font-size: 14px;
       color: #fff;
       font-weight: bold;
-      margin-top: 6px;
     }
+
     #timeIcon {
       margin-right: 6px;
       font-size: 16px;
     }
-    #status { font-size: 12px; color: #888; }
 
-    /* 操作行のレイアウト調整（置き換え） */
+    #status {
+      font-size: 12px;
+      color: #888;
+    }
+
+    /* ===== フレックス行（操作行） ===== */
+
     .row.flex {
       display: flex;
       gap: 8px;
       align-items: center;
+      overflow: hidden; /* はみ出し防止 */
+    }
+
+    /* iOS Safari対策：縮んでOK */
+    .row.flex select,
+    .row.flex button {
+      min-width: 0;
     }
 
     /* 単位プルダウン：最小 */
@@ -75,16 +106,20 @@
     /* ログ選択：主役 */
     .row.flex select#dateSelect {
       flex: 1 1 auto;
+      text-overflow: ellipsis;
+      overflow: hidden;
+      white-space: nowrap;
     }
 
-    /* 開始地点へボタン：横に広く・1行 */
+    /* 開始地点へボタン：横広・1行 */
     .row.flex button#moveBtn {
-      flex: 0 0 90px;
+      flex: 0 0 100px;
       white-space: nowrap;
       padding: 10px 8px;
     }
 
-    /* メモ表示（表示専用） */
+    /* ===== メモ表示 ===== */
+
     #memoInput {
       font-size: 15px;
       padding: 8px 10px;
@@ -95,7 +130,16 @@
         "Hiragino Maru Gothic ProN",
         "Hiragino Sans",
         sans-serif;
-      letter-spacing: 0.03em;
+      background: #151515;
+      border-color: #444;
+    }
+
+    /* ===== 時間行 ===== */
+
+    .timeRow {
+      display: flex;
+      align-items: center;
+      gap: 6px;
     }
   </style>
 </head>
