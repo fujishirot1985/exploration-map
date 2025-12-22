@@ -209,6 +209,8 @@
   let logs = [];
   let selectedLogId = "";
 
+  let autoPanned = false;
+
   const slider = document.getElementById('timeSlider');
   const label  = document.getElementById('dateLabel');
   const timeIcon = document.getElementById('timeIcon');
@@ -373,6 +375,28 @@
     });
 
     label.textContent = new Date(timeBuckets[index][0]).toLocaleString();
+
+    // ===== 足跡が画面外に出たら1回だけ寄せる =====
+    const lastBucket = timeBuckets[index];
+    if (lastBucket) {
+      const pts = lastBucket[1];
+      if (pts && pts.length) {
+        const last = pts[pts.length - 1];
+        const latlng = L.latLng(last.lat, last.lng);
+
+        const inView = map.getBounds().contains(latlng);
+
+        if (!inView && !autoPanned) {
+          map.panTo(latlng, { animate: true });
+          autoPanned = true;
+        }
+
+        // ★ 画面内に戻ったら、次の自動寄せを許可
+        if (inView) {
+          autoPanned = false;
+        }
+      }
+    }
   }
 
   function buildDateSelectForDates() {
@@ -409,6 +433,8 @@
   function rebuild() {
     const unit = unitSelect.value;
     const logMode = unit === 'minute';
+
+    autoPanned = false;
 
     dateSelect.disabled = !(unit === 'minute' || unit === 'hour');
     moveBtn.disabled = !(logMode && selectedLogId);
