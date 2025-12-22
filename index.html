@@ -162,12 +162,11 @@
   <!-- ② 操作行 -->
   <div class="row flex">
     <select id="unitSelect" class="unitSmall">
-      <option value="minute">分</option>
-      <option value="hour">時間</option>
-      <option value="day">日</option>
-      <option value="day_sum">日累計</option>
-      <option value="month">月</option>
-      <option value="month_sum">月累計</option>
+      <option value="minute">足跡を追う</option>
+      <option value="day">最近の散歩コース</option>
+      <option value="day_sum">最近いったところ</option>
+      <option value="month">これまでの散歩コース</option>
+      <option value="month_sum">これまでいったところ</option>
     </select>
 
     <select id="dateSelect" disabled>
@@ -384,7 +383,7 @@
       }
     });
 
-    label.textContent = new Date(timeBuckets[index][0]).toLocaleString();
+    label.textContent = formatLabel(timeBuckets[index][0], unit);
 
     // ===== 足跡が画面外に出たら1回だけ寄せる =====
     const lastBucket = timeBuckets[index];
@@ -536,6 +535,23 @@
       if (timeEl) pts.push({ lat, lng, time: timeEl.textContent });
     }
     return pts;
+  }
+
+  function formatLabel(dateIso, unit) {
+    const d = new Date(dateIso);
+
+    if (unit === "day" || unit === "day_sum") {
+      // 日単位：日付のみ
+      return d.toLocaleDateString();
+    }
+
+    if (unit === "month" || unit === "month_sum") {
+      // 月単位：年月のみ
+      return `${d.getFullYear()}年${d.getMonth() + 1}月`;
+    }
+
+    // 足跡を追う（minute）：日時
+    return d.toLocaleString();
   }
 
   slider.addEventListener('input', () => render(Number(slider.value)));
