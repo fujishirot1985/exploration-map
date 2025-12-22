@@ -57,17 +57,38 @@
     }
     #status { font-size: 12px; color: #888; }
 
+    /* 操作行のレイアウト調整（置き換え） */
     .row.flex {
       display: flex;
       gap: 8px;
       align-items: center;
     }
-    #dateSelect { flex: 1 1 auto; }
+
+    /* 単位プルダウン：最小 */
+    .row.flex select.unitSmall {
+      flex: 0 0 90px;
+      padding-left: 6px;
+      padding-right: 6px;
+      text-align: center;
+    }
+
+    /* ログ選択：主役 */
+    .row.flex select#dateSelect {
+      flex: 1 1 auto;
+    }
+
+    /* 開始地点へボタン：横に広く・1行 */
+    .row.flex button#moveBtn {
+      flex: 0 0 110px;
+      white-space: nowrap;
+      padding: 10px 8px;
+    }
 
     /* メモ表示（表示専用） */
     #memoInput {
       font-size: 13px;
       padding: 8px 10px;
+      text-align: center;
     }
   </style>
 </head>
@@ -76,31 +97,8 @@
 <div id="map"></div>
 
 <div id="ui">
-  <div class="row">
-    <select id="unitSelect">
-      <option value="minute">分（1分）</option>
-      <option value="hour">時間</option>
-      <option value="day">日</option>
-      <option value="day_sum">日（累計）</option>
-      <option value="month">月</option>
-      <option value="month_sum">月（累計）</option>
-    </select>
-  </div>
 
-  <div class="row flex">
-    <select id="dateSelect" disabled>
-      <option value="">日付を選択</option>
-    </select>
-    <button id="moveBtn" disabled>ログ位置へ</button>
-  </div>
-
-  <div class="row">
-    <input type="range" id="timeSlider" min="0" max="0" value="0" disabled />
-    <span id="timeIcon"></span>
-    <span id="dateLabel">読み込み中…</span>
-  </div>
-
-  <!-- メモ表示欄 -->
+  <!-- ① メモ（最上段） -->
   <div class="row" id="memoRow" style="display:none;">
     <input
       type="text"
@@ -108,6 +106,35 @@
       placeholder="この散歩のメモ"
       readonly
     />
+  </div>
+
+  <!-- ② 操作行 -->
+  <div class="row flex">
+    <select id="unitSelect" class="unitSmall">
+      <option value="minute">分</option>
+      <option value="hour">時間</option>
+      <option value="day">日</option>
+      <option value="day_sum">日累計</option>
+      <option value="month">月</option>
+      <option value="month_sum">月累計</option>
+    </select>
+
+    <select id="dateSelect" disabled>
+      <option value="">ログを選択</option>
+    </select>
+
+    <button id="moveBtn" disabled>開始地点へ</button>
+  </div>
+
+  <!-- ③ スライダー -->
+  <div class="row">
+    <input type="range" id="timeSlider" min="0" max="0" value="0" disabled />
+  </div>
+
+  <!-- ④ 時間表示 -->
+  <div class="row timeRow">
+    <span id="timeIcon"></span>
+    <span id="dateLabel">読み込み中…</span>
   </div>
 
   <div id="status">クラウドからログを読み込んでいます</div>
