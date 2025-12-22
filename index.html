@@ -97,7 +97,15 @@
 
     /* 単位プルダウン：最小 */
     .row.flex select.unitSmall {
-      flex: 0 0 90px;
+      flex: 0 0 110px;
+      padding-left: 6px;
+      padding-right: 6px;
+      text-align: center;
+    }
+
+    /* 単位プルダウン：広め（足跡以外） */
+    .row.flex select.unitWide {
+      flex: 0 0 200px;   /* ← 見切れないサイズ */
       padding-left: 6px;
       padding-right: 6px;
       text-align: center;
@@ -113,7 +121,7 @@
 
     /* 開始地点へボタン：横広・1行 */
     .row.flex button#moveBtn {
-      flex: 0 0 100px;
+      flex: 0 0 90px;
       white-space: nowrap;
       padding: 10px 8px;
     }
@@ -442,6 +450,13 @@
   function rebuild() {
     const unit = unitSelect.value;
     const logMode = unit === 'minute';
+
+    unitSelect.classList.toggle("unitWide", !logMode);
+    unitSelect.classList.toggle("unitSmall", logMode);
+
+    // 足跡モード以外ではログ操作UIを隠す
+    dateSelect.style.display = logMode ? "" : "none";
+    moveBtn.style.display   = logMode ? "" : "none";
 
     autoPanned = false;
 
