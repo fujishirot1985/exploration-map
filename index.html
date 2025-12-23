@@ -16,9 +16,7 @@
       font-family: -apple-system, BlinkMacSystemFont, sans-serif;
     }
 
-    #map {
-      height: 80%;
-    }
+    #map { height: 80%; }
 
     #ui {
       height: 20%;
@@ -28,13 +26,10 @@
       box-sizing: border-box;
     }
 
-    .row {
-      margin-bottom: 8px;
-    }
+    .row { margin-bottom: 8px; }
 
     select,
     input[type="range"],
-    input[type="text"],
     button {
       width: 100%;
       padding: 10px;
@@ -62,93 +57,69 @@
       border: none;
     }
 
-    /* ===== ラベル・時間表示 ===== */
-
     #dateLabel {
       font-size: 14px;
       color: #fff;
       font-weight: bold;
     }
 
-    #timeIcon {
-      margin-right: 6px;
-      font-size: 16px;
-    }
-
-    #status {
-      font-size: 12px;
-      color: #888;
-    }
-
-    /* ===== フレックス行（操作行） ===== */
+    #timeIcon { margin-right: 6px; font-size: 16px; }
+    #status { font-size: 12px; color: #888; }
 
     .row.flex {
       display: flex;
       gap: 8px;
       align-items: center;
-      overflow: hidden; /* はみ出し防止 */
+      overflow: hidden;
     }
 
-    /* iOS Safari対策：縮んでOK */
-    .row.flex select,
-    .row.flex button {
-      min-width: 0;
-    }
+    .row.flex > * { min-width: 0; }
 
-    /* 単位プルダウン：最小 */
-    .row.flex select.unitSmall {
-      flex: 0 0 110px;
-      padding-left: 6px;
-      padding-right: 6px;
-      text-align: center;
-    }
+    /* 2行目：再生/停止 + メニュー */
+    button#playBtn { flex: 0 0 120px; }
+    button#stopBtn { flex: 0 0 80px;  opacity: 0.95; }
+    select#unitSelect { flex: 1 1 auto; }
 
-    /* 単位プルダウン：広め（足跡以外） */
-    .row.flex select.unitWide {
-      flex: 0 0 200px;   /* ← 見切れないサイズ */
-      padding-left: 6px;
-      padding-right: 6px;
-      text-align: center;
-    }
-
-    /* ログ選択：主役 */
-    .row.flex select#dateSelect {
-      flex: 1 1 auto;
+    /* 1行目：ログ選択を最優先で省略表示 */
+    select#dateSelect {
       text-overflow: ellipsis;
       overflow: hidden;
       white-space: nowrap;
     }
-
-    /* 開始地点へボタン：横広・1行 */
-    .row.flex button#moveBtn {
-      flex: 0 0 90px;
-      white-space: nowrap;
-      padding: 10px 8px;
-    }
-
-    /* ===== メモ表示 ===== */
-
-    #memoInput {
-      font-size: 15px;
-      padding: 8px 10px;
-      text-align: center;
-      font-family:
-        -apple-system,
-        BlinkMacSystemFont,
-        "Hiragino Maru Gothic ProN",
-        "Hiragino Sans",
-        sans-serif;
-      background: #151515;
-      border-color: #444;
-    }
-
-    /* ===== 時間行 ===== */
 
     .timeRow {
       display: flex;
       align-items: center;
       gap: 6px;
     }
+
+    /* ===== 追加：イベントアイコン ===== */
+    .eventIcon {
+      font-size: 18px;
+      line-height: 18px;
+      transform: translateY(-2px);
+      filter: drop-shadow(0 1px 2px rgba(0,0,0,0.65));
+      opacity: 0.95;
+      user-select: none;
+    }
+
+    /* ===== 追加：ポップアップの雰囲気 ===== */
+    .evtPopup {
+      font-size: 12px;
+      color: #eee;
+      background: rgba(20,20,20,0.92);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 10px;
+      padding: 8px 10px;
+      max-width: 220px;
+      animation: fadeIn 0.22s ease-out forwards;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .leaflet-popup-content-wrapper { background: transparent; box-shadow: none; }
+    .leaflet-popup-tip { background: rgba(20,20,20,0.92); }
   </style>
 </head>
 <body>
@@ -156,43 +127,32 @@
 <div id="map"></div>
 
 <div id="ui">
-
-  <!-- ① メモ（最上段） -->
-  <div class="row" id="memoRow" style="display:none;">
-    <input
-      type="text"
-      id="memoInput"
-      placeholder="この散歩のメモ"
-      readonly
-    />
-  </div>
-
-  <!-- ② 操作行 -->
-  <div class="row flex">
-    <select id="unitSelect" class="unitSmall">
-      <option value="minute">散歩を追う</option>
-      <option value="day">散歩コースをみる</option>
-      <option value="day_sum">散歩コースを重ねる</option>
-      <!-- 月系はいったん消す -->
-      <!--
-      <option value="month">これまでの散歩コース</option>
-      <option value="month_sum">これまでいったところ</option>
-      -->
-    </select>
-
+  <!-- 1行目：ログ選択（固定） -->
+  <div class="row">
     <select id="dateSelect" disabled>
       <option value="">ログを選択</option>
     </select>
-
-    <button id="moveBtn" disabled>開始地点へ</button>
   </div>
 
-  <!-- ③ スライダー -->
+  <!-- 2行目：再生/停止 + メニュー選択（固定） -->
+  <div class="row flex">
+    <button id="playBtn" disabled>ゆっくり再生</button>
+    <button id="stopBtn" disabled>停止</button>
+
+    <!-- 暫定：メニュー選択 -->
+    <select id="unitSelect">
+      <option value="minute">散歩を追う</option>
+      <option value="day">散歩コースをみる</option>
+      <option value="day_sum">散歩コースを重ねる</option>
+    </select>
+  </div>
+
+  <!-- 3行目：スライダー（固定） -->
   <div class="row">
     <input type="range" id="timeSlider" min="0" max="0" value="0" disabled />
   </div>
 
-  <!-- ④ 時間表示 -->
+  <!-- 4行目：時刻ラベル（補足情報） -->
   <div class="row timeRow">
     <span id="timeIcon"></span>
     <span id="dateLabel">読み込み中…</span>
@@ -214,12 +174,20 @@
   let allPoints = [];
   let timeBuckets = [];
   let footprintMarkers = [];
-  let selectedDate = null;
+  let eventMarkers = [];
 
   let logs = [];
   let selectedLogId = "";
 
   let autoPanned = false;
+
+  // ===== 再生状態 =====
+  let playTimer = null;
+  let isPlaying = false;
+  let lastAutoPopupAt = 0;
+
+  // ===== イベント（ダミー） =====
+  let currentEvents = [];
 
   const slider = document.getElementById('timeSlider');
   const label  = document.getElementById('dateLabel');
@@ -227,9 +195,9 @@
   const status = document.getElementById('status');
   const unitSelect = document.getElementById('unitSelect');
   const dateSelect = document.getElementById('dateSelect');
-  const moveBtn = document.getElementById('moveBtn');
-  const memoRow = document.getElementById('memoRow');
-  const memoInput = document.getElementById('memoInput');
+
+  const playBtn = document.getElementById('playBtn');
+  const stopBtn = document.getElementById('stopBtn');
 
   function clearLayers(arr) {
     arr.forEach(l => map.removeLayer(l));
@@ -264,32 +232,17 @@
 
   const footprintSvg =
   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">' +
-
-    // --- ハロー（外側） ---
     '<circle cx="6"  cy="7"  r="2.8" fill="rgba(255,255,255,0.8)"/>' +
     '<circle cx="10" cy="5"  r="2.8" fill="rgba(255,255,255,0.8)"/>' +
     '<circle cx="14" cy="5"  r="2.8" fill="rgba(255,255,255,0.8)"/>' +
     '<circle cx="18" cy="7"  r="2.8" fill="rgba(255,255,255,0.8)"/>' +
     '<ellipse cx="12" cy="14" rx="5.8" ry="4.6" fill="rgba(255,255,255,0.8)"/>' +
-
-    // --- 本体（内側） ---
     '<circle cx="6"  cy="7"  r="2" fill="#444"/>' +
     '<circle cx="10" cy="5"  r="2" fill="#444"/>' +
     '<circle cx="14" cy="5"  r="2" fill="#444"/>' +
     '<circle cx="18" cy="7"  r="2" fill="#444"/>' +
     '<ellipse cx="12" cy="14" rx="5" ry="4" fill="#444"/>' +
-
   '</svg>';
-
-  function colorFromDayKey(dayKey) {
-    let hash = 0;
-    for (let i = 0; i < dayKey.length; i++) {
-      hash = (hash << 5) - hash + dayKey.charCodeAt(i);
-      hash |= 0;
-    }
-    const hue = Math.abs(hash) % 360;
-    return `hsl(${hue}, 40%, 45%)`;
-  }
 
   function distance(a, b) {
     const R = 6371000;
@@ -320,10 +273,119 @@
     return "🌙";
   }
 
+  function escapeHtml(str) {
+    return String(str)
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#39;');
+  }
+
+  function makeEventDivIcon(type) {
+    const html = type === 'memo' ? '💬' : '📷';
+    return L.divIcon({
+      className: '',
+      html: `<div class="eventIcon">${html}</div>`,
+      iconSize: [20, 20],
+      iconAnchor: [10, 10]
+    });
+  }
+
+  function showEventPopup(latlng, content, autoCloseMs = 0) {
+    const now = Date.now();
+    if (autoCloseMs > 0 && now - lastAutoPopupAt < 450) return;
+    if (autoCloseMs > 0) lastAutoPopupAt = now;
+
+    const popup = L.popup({ closeButton: false, autoClose: true, closeOnClick: true })
+      .setLatLng(latlng)
+      .setContent(`<div class="evtPopup">${escapeHtml(content)}</div>`)
+      .openOn(map);
+
+    if (autoCloseMs > 0) {
+      setTimeout(() => {
+        try { map.closePopup(popup); } catch(e) {}
+      }, autoCloseMs);
+    }
+  }
+
+  function buildDummyEventsForLog(log) {
+    if (!log || !log.points || log.points.length < 5) return [];
+    const n = log.points.length;
+    const i1 = Math.max(1, Math.floor(n * 0.30));
+    const i2 = Math.max(2, Math.floor(n * 0.70));
+
+    const p1 = log.points[i1];
+    const p2 = log.points[i2];
+
+    return [
+      {
+        id: 'evt_memo_1',
+        type: 'memo',
+        latlng: [p1.lat, p1.lng],
+        content: '（ダミー）ここでメモ：パン屋が良かった',
+        fired: false
+      },
+      {
+        id: 'evt_photo_1',
+        type: 'photo',
+        latlng: [p2.lat, p2.lng],
+        content: '（ダミー）ここで写真：夕焼けがきれいだった',
+        fired: false
+      }
+    ];
+  }
+
+  function formatLabel(dateIso, unit) {
+    const d = new Date(dateIso);
+    if (unit === "day" || unit === "day_sum") return d.toLocaleDateString();
+    if (unit === "month" || unit === "month_sum") return `${d.getFullYear()}年${d.getMonth() + 1}月`;
+    return d.toLocaleString();
+  }
+
+  function stopPlayback() {
+    if (playTimer) {
+      clearInterval(playTimer);
+      playTimer = null;
+    }
+    isPlaying = false;
+    playBtn.textContent = "ゆっくり再生";
+  }
+
+  function startPlayback() {
+    const unit = unitSelect.value;
+    if (!(unit === 'minute' && selectedLogId)) return;
+    if (isPlaying) return;
+
+    slider.value = 0;
+    currentEvents.forEach(e => e.fired = false);
+
+    isPlaying = true;
+    playBtn.textContent = "再生中…";
+
+    const stepMs = 900;
+    playTimer = setInterval(() => {
+      const v = Number(slider.value);
+      const max = Number(slider.max);
+
+      if (v >= max) {
+        stopPlayback();
+        return;
+      }
+
+      slider.value = String(v + 1);
+      render(Number(slider.value));
+    }, stepMs);
+  }
+
   function render(index) {
     clearLayers(footprintMarkers);
+    clearLayers(eventMarkers);
 
     const unit = unitSelect.value;
+    const isMinuteMode = (unit === 'minute' && selectedLogId);
+    const isPlayback = isMinuteMode && isPlaying;
+
     const isCumulative =
       unit === 'minute' ||
       unit === 'hour' ||
@@ -338,180 +400,196 @@
     const isRouteScale = zoom >= 14;
 
     const FOOTPRINT_INTERVAL = 60 * 1000;
-    const AREA_RADIUS = areaRadiusByZoom(zoom);
+    const THIN_BY_DISTANCE = areaRadiusByZoom(zoom);
 
-    let lastTime = null;
+    const allVisiblePoints = [];
+    visible.forEach(([_, pts]) => {
+      const sorted = pts.slice().sort((a, b) => new Date(a.time) - new Date(b.time));
+      sorted.forEach(p => allVisiblePoints.push(p));
+    });
 
-    visible.forEach(([dayKey, pts]) => {
-      const sorted = pts.slice().sort(
-        (a, b) => new Date(a.time) - new Date(b.time)
-      );
+    const placed = [];
+    let lastPlacedTime = null;
+    let lastPlacedLatLng = null;
 
-      const color =
-        unit === 'day_sum'
-          ? colorFromDayKey(dayKey)
-          : '#444';
-
-      const icon = L.icon({
-        iconUrl:
-          'data:image/svg+xml;base64,' +
-          btoa(footprintSvg.replace(/fill="#444"/g, `fill="${color}"`)),
-        iconSize: [18, 18],
-        iconAnchor: [9, 9]
-      });
+    allVisiblePoints.forEach(p => {
+      const t = new Date(p.time).getTime();
 
       if (isRouteScale) {
-        sorted.forEach(p => {
-          const t = new Date(p.time).getTime();
-          if (!lastTime || t - lastTime >= FOOTPRINT_INTERVAL) {
-            lastTime = t;
-            footprintMarkers.push(
-              L.marker([p.lat, p.lng], { icon, interactive:false }).addTo(map)
-            );
-          }
-        });
-      } else {
-        const areas = [];
-        sorted.forEach(p => {
-          let placed = false;
-          for (const a of areas) {
-            if (distance(a, p) <= AREA_RADIUS) {
-              a.lat = (a.lat * a.count + p.lat) / (a.count + 1);
-              a.lng = (a.lng * a.count + p.lng) / (a.count + 1);
-              a.count++;
-              placed = true;
-              break;
-            }
-          }
-          if (!placed) areas.push({ lat:p.lat, lng:p.lng, count:1 });
-        });
-
-        areas.forEach(a => {
-          footprintMarkers.push(
-            L.marker([a.lat, a.lng], { icon, interactive:false }).addTo(map)
-          );
-        });
+        if (lastPlacedTime && t - lastPlacedTime < FOOTPRINT_INTERVAL) return;
+        lastPlacedTime = t;
       }
+
+      const latlng = { lat: p.lat, lng: p.lng };
+      if (lastPlacedLatLng) {
+        const d = distance(lastPlacedLatLng, latlng);
+        if (!isRouteScale && d < THIN_BY_DISTANCE) return;
+        if (isRouteScale && d < 8) return;
+      }
+
+      lastPlacedLatLng = latlng;
+      placed.push(latlng);
+    });
+
+    const baseIcon = L.icon({
+      iconUrl: 'data:image/svg+xml;base64,' + btoa(footprintSvg),
+      iconSize: [18, 18],
+      iconAnchor: [9, 9]
+    });
+
+    placed.forEach((p, idx) => {
+      let opacity = 1.0;
+      if (isPlayback) {
+        const d = placed.length - 1 - idx;
+        if (d === 0) opacity = 1.00;
+        else if (d === 1) opacity = 0.65;
+        else if (d === 2) opacity = 0.40;
+        else opacity = 0.25;
+      }
+
+      footprintMarkers.push(
+        L.marker([p.lat, p.lng], { icon: baseIcon, interactive: false, opacity }).addTo(map)
+      );
     });
 
     label.textContent = formatLabel(timeBuckets[index][0], unit);
 
-    // ===== 足跡が画面外に出たら1回だけ寄せる =====
-    const lastBucket = timeBuckets[index];
-    if (lastBucket) {
-      const pts = lastBucket[1];
-      if (pts && pts.length) {
-        const last = pts[pts.length - 1];
-        const latlng = L.latLng(last.lat, last.lng);
+    if (isMinuteMode && currentEvents.length) {
+      currentEvents.forEach(e => {
+        const marker = L.marker(e.latlng, {
+          icon: makeEventDivIcon(e.type),
+          interactive: true
+        }).addTo(map);
 
-        const inView = map.getBounds().contains(latlng);
+        eventMarkers.push(marker);
 
-        if (!inView && !autoPanned) {
-          map.panTo(latlng, { animate: true });
-          autoPanned = true;
-        }
+        marker.on('click', () => {
+          showEventPopup(e.latlng, e.content, 0);
+        });
+      });
+    }
 
-        // ★ 画面内に戻ったら、次の自動寄せを許可
-        if (inView) {
-          autoPanned = false;
-        }
+    const lastPlaced = placed.length ? placed[placed.length - 1] : null;
+    if (lastPlaced) {
+      const latlng = L.latLng(lastPlaced.lat, lastPlaced.lng);
+      const inView = map.getBounds().contains(latlng);
+
+      if (!inView && !autoPanned) {
+        map.panTo(latlng, { animate: true });
+        autoPanned = true;
       }
+      if (inView) autoPanned = false;
+    }
+
+    if (isMinuteMode && currentEvents.length && lastPlaced) {
+      currentEvents.forEach(e => {
+        if (e.fired) return;
+        const d = distance(lastPlaced, { lat: e.latlng[0], lng: e.latlng[1] });
+        if (d < 30) {
+          e.fired = true;
+          showEventPopup(e.latlng, e.content, 2200);
+        }
+      });
     }
   }
 
-  function buildDateSelectForDates() {
-    dateSelect.innerHTML = '<option value="">日付を選択</option>';
-    const set = new Set();
-    allPoints.forEach(p => set.add(localDateString(p.time)));
-    Array.from(set).sort().forEach(d => {
-      const opt = document.createElement('option');
-      opt.value = d;
-      opt.textContent = d;
-      dateSelect.appendChild(opt);
-    });
-  }
-
-  function buildDateSelectForLogs() {
+  function buildLogSelect() {
     dateSelect.innerHTML = '<option value="">ログを選択</option>';
+
     logs.forEach(l => {
       const d = new Date(l.startIso);
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth()+1).padStart(2,'0');
+      const dd = String(d.getDate()).padStart(2,'0');
+      const hh = String(d.getHours()).padStart(2,'0');
+      const mi = String(d.getMinutes()).padStart(2,'0');
+
+      const note = (l.note || "").trim();
+      const title = note ? note : "（メモなし）";
+
       const opt = document.createElement('option');
       opt.value = l.id;
-      opt.textContent =
-        `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}〜`;
+      opt.textContent = `${yyyy}-${mm}-${dd} ${hh}:${mi}  ${title}`;
       dateSelect.appendChild(opt);
     });
+
     if (selectedLogId) dateSelect.value = selectedLogId;
   }
 
-  function moveToSelectedLog() {
+  function jumpToSelectedLogStart() {
     const log = logs.find(l => l.id === selectedLogId);
     if (!log) return;
     map.setView(log.firstLatLng, map.getZoom(), { animate: true });
   }
 
+  function updatePlayButtonsState() {
+    const canPlay = (unitSelect.value === 'minute' && !!selectedLogId);
+    playBtn.disabled = !canPlay;
+    stopBtn.disabled = !canPlay;
+    if (!canPlay) stopPlayback();
+  }
+
   function rebuild() {
-    const unit = unitSelect.value;
-    const logMode = unit === 'minute';
-
-    unitSelect.classList.toggle("unitWide", !logMode);
-    unitSelect.classList.toggle("unitSmall", logMode);
-
-    // 足跡モード以外ではログ操作UIを隠す
-    dateSelect.style.display = logMode ? "" : "none";
-    moveBtn.style.display   = logMode ? "" : "none";
-
+    stopPlayback();
     autoPanned = false;
 
-    dateSelect.disabled = !(unit === 'minute' || unit === 'hour');
-    moveBtn.disabled = !(logMode && selectedLogId);
+    buildLogSelect();
+    updatePlayButtonsState();
 
-    let targetPoints = allPoints;
+    const unit = unitSelect.value;
 
-    memoRow.style.display = (logMode && selectedLogId) ? "block" : "none";
+    // 表示対象ポイント（unit に応じて）
+    let targetPoints = [];
 
-    if (logMode) {
-      buildDateSelectForLogs();
+    if (unit === 'minute') {
       if (selectedLogId) {
         const log = logs.find(l => l.id === selectedLogId);
         if (log) {
           targetPoints = log.points;
-          timeIcon.textContent =
-            timeIconFromHour(new Date(log.startIso).getHours());
-          memoInput.value = log.note || "";
+          timeIcon.textContent = timeIconFromHour(new Date(log.startIso).getHours());
+          currentEvents = buildDummyEventsForLog(log);
         }
       } else {
-        targetPoints = [];
         timeIcon.textContent = "";
-        memoInput.value = "";
+        currentEvents = [];
       }
-    } else if (unit === 'hour') {
-      buildDateSelectForDates();
-      if (selectedDate) {
-        targetPoints = allPoints.filter(p => localDateString(p.time) === selectedDate);
-      }
+    } else if (unit === 'day') {
+      // 全体の「日」切り替え（ログ指定は使わず全ログ分）
+      targetPoints = allPoints;
       timeIcon.textContent = "";
-      memoInput.value = "";
+      currentEvents = [];
+    } else if (unit === 'day_sum') {
+      targetPoints = allPoints;
+      timeIcon.textContent = "";
+      currentEvents = [];
     } else {
+      targetPoints = allPoints;
       timeIcon.textContent = "";
-      memoInput.value = "";
+      currentEvents = [];
     }
 
     timeBuckets = buildBuckets(unit, targetPoints);
 
     if (!timeBuckets.length) {
       slider.disabled = true;
+      slider.min = 0;
+      slider.max = 0;
+      slider.value = 0;
       label.textContent = 'ログなし';
       clearLayers(footprintMarkers);
+      clearLayers(eventMarkers);
       return;
     }
 
     slider.min = 0;
     slider.max = timeBuckets.length - 1;
-    slider.value = 0;
     slider.disabled = false;
 
-    render(slider.value);
+    // minute+ログ選択時は「一枚絵」から（末尾）
+    if (unit === 'minute' && selectedLogId) slider.value = String(slider.max);
+    else slider.value = "0";
+
+    render(Number(slider.value));
   }
 
   async function loadFromGAS() {
@@ -538,7 +616,12 @@
     });
 
     logs.sort((a, b) => new Date(a.startIso) - new Date(b.startIso));
+
     status.textContent = `${files.length}ファイル / ${allPoints.length}点`;
+
+    dateSelect.disabled = false;
+    unitSelect.disabled = false;
+
     rebuild();
   }
 
@@ -555,44 +638,41 @@
     return pts;
   }
 
-  function formatLabel(dateIso, unit) {
-    const d = new Date(dateIso);
+  slider.addEventListener('input', () => {
+    stopPlayback();
+    render(Number(slider.value));
+  });
 
-    if (unit === "day" || unit === "day_sum") {
-      // 日単位：日付のみ
-      return d.toLocaleDateString();
-    }
-
-    if (unit === "month" || unit === "month_sum") {
-      // 月単位：年月のみ
-      return `${d.getFullYear()}年${d.getMonth() + 1}月`;
-    }
-
-    // 足跡を追う（minute）：日時
-    return d.toLocaleString();
-  }
-
-  slider.addEventListener('input', () => render(Number(slider.value)));
   unitSelect.addEventListener('change', () => {
-    if (unitSelect.value !== 'minute') selectedLogId = "";
+    stopPlayback();
     rebuild();
   });
+
   dateSelect.addEventListener('change', () => {
-    if (unitSelect.value === 'minute') {
-      selectedLogId = dateSelect.value;
-      // ★ ログ選択と同時に開始地点へ
-      if (selectedLogId) {
-        moveToSelectedLog();
-      }
-    } else {
-      selectedDate = dateSelect.value;
+    stopPlayback();
+    selectedLogId = dateSelect.value;
+
+    // 「開始地点へ」ボタン削除の代わりに：ログを選んだら自動で開始地点へ
+    if (selectedLogId) {
+      jumpToSelectedLogStart();
     }
+
     rebuild();
   });
-  moveBtn.addEventListener('click', moveToSelectedLog);
+
   map.on('zoomend', () => {
     if (!slider.disabled) render(Number(slider.value));
   });
+
+  playBtn.addEventListener('click', () => {
+    if (isPlaying) {
+      stopPlayback();
+      return;
+    }
+    startPlayback();
+  });
+
+  stopBtn.addEventListener('click', stopPlayback);
 
   loadFromGAS();
 </script>
