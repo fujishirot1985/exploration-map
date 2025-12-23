@@ -129,7 +129,7 @@
   <!-- 1行目：ログ選択（固定） -->
   <div class="row">
     <select id="dateSelect" disabled>
-      <option value="">ログを選択</option>
+      <option value="">散歩を選ぶ</option>
     </select>
   </div>
 
@@ -356,7 +356,7 @@
     isPlaying = true;
     playBtn.textContent = "再生中…";
 
-    const stepMs = 900;
+    const stepMs = 1800;
     playTimer = setInterval(() => {
       const v = Number(slider.value);
       const max = Number(slider.max);
