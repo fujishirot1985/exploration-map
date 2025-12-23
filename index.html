@@ -148,6 +148,7 @@
   <div class="row timeRow">
     <span id="timeIcon"></span>
     <span id="dateLabel">読み込み中…</span>
+    <span id="progressLabel" style="font-size:12px; color:#bbb; margin-left:8px;"></span>
   </div>
 
   <div id="status">クラウドからログを読み込んでいます</div>
@@ -183,6 +184,7 @@
 
   const slider = document.getElementById('timeSlider');
   const label  = document.getElementById('dateLabel');
+  const progressLabel = document.getElementById('progressLabel');
   const timeIcon = document.getElementById('timeIcon');
   const status = document.getElementById('status');
   const dateSelect = document.getElementById('dateSelect');
@@ -446,19 +448,37 @@
 
     label.textContent = formatLabel(timeBuckets[index][0], unit);
 
-    if (isMinuteMode && currentEvents.length) {
-      currentEvents.forEach(e => {
-        const marker = L.marker(e.latlng, {
-          icon: makeEventDivIcon(e.type),
-          interactive: true
-        }).addTo(map);
+    // ===== 追加：経過時間 & 到達距離（起点から）=====
+    if (isMinuteMode && selectedLogId) {
+      const log = logs.find(l => l.id === selectedLogId);
+      if (log && log.points.length > 1 && timeBuckets[index]) {
+        const startTime = new Date(log.points[0].time);
 
-        eventMarkers.push(marker);
+        // ★重要：indexは「bucket」なので、bucket時刻までのpointsを拾う
+        const bucketIso = timeBuckets[index][0];
+        const cutoffMs = new Date(bucketIso).getTime();
 
-        marker.on('click', () => {
-          showEventPopup(e.latlng, e.content, 0);
-        });
-      });
+        let dist = 0;
+        let last = log.points[0];
+        let currentTimeMs = startTime.getTime();
+
+        for (let i = 1; i < log.points.length; i++) {
+          const p = log.points[i];
+          const t = new Date(p.time).getTime();
+          if (t > cutoffMs) break;
+          dist += distance(last, p);
+          last = p;
+          currentTimeMs = t;
+        }
+
+        const elapsedMin = Math.floor((currentTimeMs - startTime.getTime()) / 60000);
+        const km = (dist / 1000).toFixed(2);
+        progressLabel.textContent = `｜＋${elapsedMin}分 ｜ ${km}km`;
+      } else {
+        progressLabel.textContent = '';
+      }
+    } else {
+      progressLabel.textContent = '';
     }
 
     const lastPlaced = placed.length ? placed[placed.length - 1] : null;
