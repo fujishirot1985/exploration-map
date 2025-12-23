@@ -78,7 +78,6 @@
     /* 2行目：再生/停止 + メニュー */
     button#playBtn { flex: 0 0 120px; }
     button#stopBtn { flex: 0 0 80px;  opacity: 0.95; }
-    select#unitSelect { flex: 1 1 auto; }
 
     /* 1行目：ログ選択を最優先で省略表示 */
     select#dateSelect {
@@ -138,13 +137,6 @@
   <div class="row flex">
     <button id="playBtn" disabled>ゆっくり再生</button>
     <button id="stopBtn" disabled>停止</button>
-
-    <!-- 暫定：メニュー選択 -->
-    <select id="unitSelect">
-      <option value="minute">散歩を追う</option>
-      <option value="day">散歩コースをみる</option>
-      <option value="day_sum">散歩コースを重ねる</option>
-    </select>
   </div>
 
   <!-- 3行目：スライダー（固定） -->
@@ -193,7 +185,6 @@
   const label  = document.getElementById('dateLabel');
   const timeIcon = document.getElementById('timeIcon');
   const status = document.getElementById('status');
-  const unitSelect = document.getElementById('unitSelect');
   const dateSelect = document.getElementById('dateSelect');
 
   const playBtn = document.getElementById('playBtn');
@@ -353,7 +344,7 @@
   }
 
   function startPlayback() {
-    const unit = unitSelect.value;
+    const unit = 'minute';
     if (!(unit === 'minute' && selectedLogId)) return;
     if (isPlaying) return;
 
@@ -373,6 +364,7 @@
         return;
       }
 
+      autoPanned = false;
       slider.value = String(v + 1);
       render(Number(slider.value));
     }, stepMs);
@@ -382,7 +374,7 @@
     clearLayers(footprintMarkers);
     clearLayers(eventMarkers);
 
-    const unit = unitSelect.value;
+    const unit = 'minute';
     const isMinuteMode = (unit === 'minute' && selectedLogId);
     const isPlayback = isMinuteMode && isPlaying;
 
@@ -471,14 +463,18 @@
 
     const lastPlaced = placed.length ? placed[placed.length - 1] : null;
     if (lastPlaced) {
-      const latlng = L.latLng(lastPlaced.lat, lastPlaced.lng);
-      const inView = map.getBounds().contains(latlng);
+      const bounds = map.getBounds();
+      const padded = bounds.pad(-0.15); // 画面内側15%
+      const lastLatLng = L.latLng(lastPlaced.lat, lastPlaced.lng);
 
-      if (!inView && !autoPanned) {
-        map.panTo(latlng, { animate: true });
+      if (!padded.contains(lastLatLng) && !autoPanned) {
+        const zoom = map.getZoom();
+        const p = map.project(lastLatLng, zoom);
+        p.y += 80; // ポップアップ余白
+
+        map.panTo(map.unproject(p, zoom), { animate: true });
         autoPanned = true;
       }
-      if (inView) autoPanned = false;
     }
 
     if (isMinuteMode && currentEvents.length && lastPlaced) {
@@ -523,7 +519,7 @@
   }
 
   function updatePlayButtonsState() {
-    const canPlay = (unitSelect.value === 'minute' && !!selectedLogId);
+    const canPlay = !!selectedLogId;
     playBtn.disabled = !canPlay;
     stopBtn.disabled = !canPlay;
     if (!canPlay) stopPlayback();
@@ -536,7 +532,7 @@
     buildLogSelect();
     updatePlayButtonsState();
 
-    const unit = unitSelect.value;
+    const unit = 'minute';
 
     // 表示対象ポイント（unit に応じて）
     let targetPoints = [];
@@ -620,7 +616,6 @@
     status.textContent = `${files.length}ファイル / ${allPoints.length}点`;
 
     dateSelect.disabled = false;
-    unitSelect.disabled = false;
 
     rebuild();
   }
@@ -640,12 +635,8 @@
 
   slider.addEventListener('input', () => {
     stopPlayback();
+    autoPanned = false;
     render(Number(slider.value));
-  });
-
-  unitSelect.addEventListener('change', () => {
-    stopPlayback();
-    rebuild();
   });
 
   dateSelect.addEventListener('change', () => {
