@@ -135,20 +135,20 @@
 
   <!-- 2行目：再生/停止 + メニュー選択（固定） -->
   <div class="row flex">
-    <button id="playBtn" disabled>ゆっくり再生</button>
+    <button id="playBtn" disabled>散歩スタート</button>
     <button id="stopBtn" disabled>停止</button>
   </div>
 
-  <!-- 3行目：スライダー（固定） -->
-  <div class="row">
-    <input type="range" id="timeSlider" min="0" max="0" value="0" disabled />
-  </div>
-
-  <!-- 4行目：時刻ラベル（補足情報） -->
+  <!-- 3行目：時刻ラベル（補足情報） -->
   <div class="row timeRow">
     <span id="timeIcon"></span>
     <span id="dateLabel">読み込み中…</span>
     <span id="progressLabel" style="font-size:12px; color:#bbb; margin-left:8px;"></span>
+  </div>
+
+  <!-- 4行目：スライダー（固定） -->
+  <div class="row">
+    <input type="range" id="timeSlider" min="0" max="0" value="0" disabled />
   </div>
 
   <div id="status">クラウドからログを読み込んでいます</div>
@@ -342,7 +342,7 @@
       playTimer = null;
     }
     isPlaying = false;
-    playBtn.textContent = "ゆっくり再生";
+    // stopBtn.textContent = "再生";
   }
 
   function startPlayback() {
@@ -350,11 +350,11 @@
     if (!(unit === 'minute' && selectedLogId)) return;
     if (isPlaying) return;
 
-    slider.value = 0;
-    currentEvents.forEach(e => e.fired = false);
+    // slider.value = 0;
+    // currentEvents.forEach(e => e.fired = false);
 
     isPlaying = true;
-    playBtn.textContent = "再生中…";
+    stopBtn.textContent = "停止";
 
     const stepMs = 1800;
     playTimer = setInterval(() => {
@@ -371,6 +371,18 @@
       render(Number(slider.value));
     }, stepMs);
   }
+
+  function restartPlaybackFromBeginning() {
+  stopPlayback();
+
+  slider.value = "0";
+  autoPanned = false;
+
+  currentEvents.forEach(e => e.fired = false);
+
+  render(0);
+  startPlayback();
+}
 
   function render(index) {
     clearLayers(footprintMarkers);
@@ -510,7 +522,7 @@
   }
 
   function buildLogSelect() {
-    dateSelect.innerHTML = '<option value="">ログを選択</option>';
+    dateSelect.innerHTML = '<option value="">散歩を選ぶ</option>';
 
     logs.forEach(l => {
       const d = new Date(l.startIso);
@@ -676,14 +688,18 @@
   });
 
   playBtn.addEventListener('click', () => {
-    if (isPlaying) {
-      stopPlayback();
-      return;
-    }
-    startPlayback();
+    restartPlaybackFromBeginning();
   });
 
-  stopBtn.addEventListener('click', stopPlayback);
+  stopBtn.addEventListener('click', () => {
+    if (isPlaying) {
+      stopBtn.textContent = "再開";
+      stopPlayback();
+    } else {
+      stopBtn.textContent = "停止";
+      startPlayback(); // 続きから
+    }
+  });
 
   loadFromGAS();
 </script>
