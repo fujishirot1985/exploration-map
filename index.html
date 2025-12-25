@@ -190,7 +190,6 @@
   }
 
   function showEventPopup(latlng, content, autoCloseMs = 0) {
-    // 連打抑制はするが、キューで順に出す
     const now = Date.now();
     if (autoCloseMs > 0 && now - lastAutoPopupAt < 250) return;
     lastAutoPopupAt = now;
@@ -292,16 +291,13 @@
       if (!popupQueue.length) { pumpingQueue = false; return; }
       const item = popupQueue.shift();
       showEventPopup(item.latlng, item.content, 2200);
-      setTimeout(tick, 550); // 同じ分に複数でも順に出る
+      setTimeout(tick, 550);
     };
     tick();
   }
 
   function render(index) {
-    // 足跡は毎回描き直し
     clearLayers(footprintMarkers);
-
-    // ★イベントは「毎回クリア＆作り直し」する（markerキャッシュは使わない）
     clearLayers(eventMarkers);
 
     const unit = 'minute';
@@ -393,7 +389,7 @@
       progressLabel.textContent = '';
     }
 
-    // 自動パン
+    // 自動パン（足跡）
     const lastPlaced = placed.length ? placed[placed.length - 1] : null;
     if (lastPlaced) {
       const bounds = map.getBounds();
@@ -421,7 +417,6 @@
         interactive: true
       }).addTo(map);
 
-      // ★ forEach の中で bind する
       marker.on('click', () => {
         showEventPopup(e.latlng, e.content, 0);
       });
@@ -429,15 +424,19 @@
       eventMarkers.push(marker);
     });
 
-    // ===== イベント発火：bucketIndex で判定（ここがズレ解消の肝）=====
+    // ===== 自動再生中：取りこぼさない発火（>= にする）=====
     if (isMinuteMode && isPlaying) {
       currentEvents.forEach(e => {
         if (e.fired) return;
-        if (index === e.bucketIndex) {
+
+        // ★「そのbucketに到達 or 通過」で発火（取りこぼし防止）
+        if (index >= e.bucketIndex) {
           e.fired = true;
-          showEventPopup(e.latlng, e.content, 2200);
+          popupQueue.push({ latlng: e.latlng, content: e.content });
         }
       });
+
+      if (popupQueue.length) pumpPopupQueue();
     }
   }
 
@@ -492,10 +491,9 @@
           targetPoints = log.points;
           timeIcon.textContent = timeIconFromHour(new Date(log.startIso).getHours());
 
-          // ★引数なしで呼ぶ
           const allMemos = await loadMemosTemporary();
 
-          // bucketKey -> bucketIndex を作る
+          // buckets（minute）を先に作る
           const tmpBuckets = buildBuckets('minute', log.points);
           const bucketIndexMap = new Map();
           tmpBuckets.forEach(([key], i) => bucketIndexMap.set(key, i));
@@ -512,19 +510,20 @@
               const nearIdx = findNearestPointIndexByTime(log.points, m.time);
               const p = log.points[nearIdx] || log.points[0];
 
-              const bKey = makeTimeKey(m.time, 'minute');
+              // ★★★★★ ここが重要：m.time ではなく「吸着した点 p.time」で bucketIndex を作る ★★★★★
+              const bKey = makeTimeKey(p.time, 'minute');               // ←変更点（m.time → p.time）
               const bIdx = bucketIndexMap.has(bKey) ? bucketIndexMap.get(bKey) : 0;
 
               return {
                 id: `memo_${idx}_${m.time}`,
-                latlng: [p.lat, p.lng],       // ★足跡に吸着
+                latlng: [p.lat, p.lng],       // 足跡に吸着
                 content: m.text || '',
                 fired: false,
-                bucketIndex: bIdx             // ★bucket indexで発火
+                bucketIndex: bIdx             // bucket indexで発火
               };
             });
 
-          // ここで tmpBuckets を本体へ
+          // buckets確定
           timeBuckets = tmpBuckets;
         }
       } else {
@@ -538,7 +537,6 @@
       timeBuckets = buildBuckets(unit, targetPoints);
     }
 
-    // timeBuckets が上で作られてない場合だけ作る
     if (!timeBuckets || !timeBuckets.length) {
       timeBuckets = buildBuckets(unit, targetPoints);
     }
