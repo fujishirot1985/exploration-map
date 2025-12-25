@@ -9,116 +9,42 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
   <style>
-    html, body {
-      margin: 0;
-      height: 100%;
-      background: #111;
-      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    html, body { margin:0; height:100%; background:#111; font-family:-apple-system,BlinkMacSystemFont,sans-serif; }
+    #map { height:80%; }
+    #ui { height:20%; padding:10px 14px; background:#1a1a1a; color:#ddd; box-sizing:border-box; }
+    .row { margin-bottom:8px; }
+    select, input[type="range"], button {
+      width:100%; padding:10px; background:#111; color:#ddd; border:1px solid #333;
+      border-radius:8px; font-size:14px; box-sizing:border-box;
     }
-
-    #map { height: 80%; }
-
-    #ui {
-      height: 20%;
-      padding: 10px 14px;
-      background: #1a1a1a;
-      color: #ddd;
-      box-sizing: border-box;
-    }
-
-    .row { margin-bottom: 8px; }
-
-    select,
-    input[type="range"],
-    button {
-      width: 100%;
-      padding: 10px;
-      background: #111;
-      color: #ddd;
-      border: 1px solid #333;
-      border-radius: 8px;
-      font-size: 14px;
-      box-sizing: border-box;
-    }
-
-    input[type="range"] {
-      width: 96%;
-      margin: 0 auto;
-      display: block;
-      height: 28px;
-    }
-
+    input[type="range"] { width:96%; margin:0 auto; display:block; height:28px; }
     input[type="range"]::-webkit-slider-thumb {
-      -webkit-appearance: none;
-      width: 28px;
-      height: 28px;
-      border-radius: 50%;
-      background: #fff;
-      border: none;
+      -webkit-appearance:none; width:28px; height:28px; border-radius:50%; background:#fff; border:none;
     }
+    #dateLabel { font-size:14px; color:#fff; font-weight:bold; }
+    #timeIcon { margin-right:6px; font-size:16px; }
+    #status { font-size:12px; color:#888; }
+    .row.flex { display:flex; gap:8px; align-items:center; overflow:hidden; }
+    .row.flex > * { min-width:0; }
+    button#playBtn { flex:0 0 120px; }
+    button#stopBtn { flex:0 0 80px; opacity:0.95; }
+    select#dateSelect { text-overflow:ellipsis; overflow:hidden; white-space:nowrap; }
+    .timeRow { display:flex; align-items:center; gap:6px; }
 
-    #dateLabel {
-      font-size: 14px;
-      color: #fff;
-      font-weight: bold;
-    }
-
-    #timeIcon { margin-right: 6px; font-size: 16px; }
-    #status { font-size: 12px; color: #888; }
-
-    .row.flex {
-      display: flex;
-      gap: 8px;
-      align-items: center;
-      overflow: hidden;
-    }
-
-    .row.flex > * { min-width: 0; }
-
-    /* 2行目：再生/停止 + メニュー */
-    button#playBtn { flex: 0 0 120px; }
-    button#stopBtn { flex: 0 0 80px;  opacity: 0.95; }
-
-    /* 1行目：ログ選択を最優先で省略表示 */
-    select#dateSelect {
-      text-overflow: ellipsis;
-      overflow: hidden;
-      white-space: nowrap;
-    }
-
-    .timeRow {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-
-    /* ===== 追加：イベントアイコン ===== */
     .eventIcon {
-      font-size: 18px;
-      line-height: 18px;
-      transform: translateY(-2px);
-      filter: drop-shadow(0 1px 2px rgba(0,0,0,0.65));
-      opacity: 0.95;
-      user-select: none;
+      font-size:18px; line-height:18px; transform:translateY(-2px);
+      filter:drop-shadow(0 1px 2px rgba(0,0,0,0.65));
+      opacity:0.95; user-select:none;
     }
-
-    /* ===== 追加：ポップアップの雰囲気 ===== */
     .evtPopup {
-      font-size: 12px;
-      color: #eee;
-      background: rgba(20,20,20,0.92);
-      border: 1px solid rgba(255,255,255,0.12);
-      border-radius: 10px;
-      padding: 8px 10px;
-      max-width: 220px;
-      animation: fadeIn 0.22s ease-out forwards;
+      font-size:12px; color:#eee; background:rgba(20,20,20,0.92);
+      border:1px solid rgba(255,255,255,0.12);
+      border-radius:10px; padding:8px 10px; max-width:220px;
+      animation:fadeIn 0.22s ease-out forwards;
     }
-    @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(4px); }
-      to   { opacity: 1; transform: translateY(0); }
-    }
-    .leaflet-popup-content-wrapper { background: transparent; box-shadow: none; }
-    .leaflet-popup-tip { background: rgba(20,20,20,0.92); }
+    @keyframes fadeIn { from { opacity:0; transform:translateY(4px);} to { opacity:1; transform:translateY(0);} }
+    .leaflet-popup-content-wrapper { background:transparent; box-shadow:none; }
+    .leaflet-popup-tip { background:rgba(20,20,20,0.92); }
   </style>
 </head>
 <body>
@@ -126,27 +52,23 @@
 <div id="map"></div>
 
 <div id="ui">
-  <!-- 1行目：ログ選択（固定） -->
   <div class="row">
     <select id="dateSelect" disabled>
       <option value="">散歩を選ぶ</option>
     </select>
   </div>
 
-  <!-- 2行目：再生/停止 + メニュー選択（固定） -->
   <div class="row flex">
     <button id="playBtn" disabled>散歩スタート</button>
     <button id="stopBtn" disabled>停止</button>
   </div>
 
-  <!-- 3行目：時刻ラベル（補足情報） -->
   <div class="row timeRow">
     <span id="timeIcon"></span>
     <span id="dateLabel">読み込み中…</span>
     <span id="progressLabel" style="font-size:12px; color:#bbb; margin-left:8px;"></span>
   </div>
 
-  <!-- 4行目：スライダー（固定） -->
   <div class="row">
     <input type="range" id="timeSlider" min="0" max="0" value="0" disabled />
   </div>
@@ -155,14 +77,11 @@
 </div>
 
 <script>
-  const GAS_URL = "https://script.google.com/macros/s/AKfycbyueOmlLN-2vDHQcrjTIOBAGYMAQy-Vnd1DdXgYezd2mZ-RQ9m2LHySWdz3ox5-NpIa/exec";
+  const GAS_URL = "https://script.google.com/macros/s/AKfycbxThJjge1AwEYweHbMc7jNSo5jfnT-wCaz_DOOzh5reQMa03KSbV5uSSv8pTKAPxPbE/exec";
+  const LOG_ID_FOR_MEMOS = "log_test"; // 暫定
 
-  const map = L.map('map', { preferCanvas: true })
-    .setView([35.7216, 140.1555], 15);
-
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '© OpenStreetMap'
-  }).addTo(map);
+  const map = L.map('map', { preferCanvas: true }).setView([35.7216, 140.1555], 15);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(map);
 
   let allPoints = [];
   let timeBuckets = [];
@@ -174,13 +93,16 @@
 
   let autoPanned = false;
 
-  // ===== 再生状態 =====
   let playTimer = null;
   let isPlaying = false;
+
+  // イベント
+  let currentEvents = [];
   let lastAutoPopupAt = 0;
 
-  // ===== イベント（ダミー） =====
-  let currentEvents = [];
+  // 同一bucketで複数メモを順に出すための簡易キュー
+  let popupQueue = [];
+  let pumpingQueue = false;
 
   const slider = document.getElementById('timeSlider');
   const label  = document.getElementById('dateLabel');
@@ -188,7 +110,6 @@
   const timeIcon = document.getElementById('timeIcon');
   const status = document.getElementById('status');
   const dateSelect = document.getElementById('dateSelect');
-
   const playBtn = document.getElementById('playBtn');
   const stopBtn = document.getElementById('stopBtn');
 
@@ -197,19 +118,12 @@
     arr.length = 0;
   }
 
-  function localDateString(iso) {
-    const d = new Date(iso);
-    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-  }
-
   function makeTimeKey(iso, unit) {
     const d = new Date(iso);
     if (unit === 'minute') d.setSeconds(0, 0);
     if (unit === 'hour')   d.setMinutes(0, 0, 0);
     if (unit === 'day' || unit === 'day_sum') d.setHours(0, 0, 0, 0);
-    if (unit === 'month' || unit === 'month_sum') {
-      d.setDate(1); d.setHours(0, 0, 0, 0);
-    }
+    if (unit === 'month' || unit === 'month_sum') { d.setDate(1); d.setHours(0, 0, 0, 0); }
     return d.toISOString();
   }
 
@@ -275,20 +189,11 @@
       .replaceAll("'", '&#39;');
   }
 
-  function makeEventDivIcon(type) {
-    const html = type === 'memo' ? '💬' : '📷';
-    return L.divIcon({
-      className: '',
-      html: `<div class="eventIcon">${html}</div>`,
-      iconSize: [20, 20],
-      iconAnchor: [10, 10]
-    });
-  }
-
   function showEventPopup(latlng, content, autoCloseMs = 0) {
+    // 連打抑制はするが、キューで順に出す
     const now = Date.now();
-    if (autoCloseMs > 0 && now - lastAutoPopupAt < 450) return;
-    if (autoCloseMs > 0) lastAutoPopupAt = now;
+    if (autoCloseMs > 0 && now - lastAutoPopupAt < 250) return;
+    lastAutoPopupAt = now;
 
     const popup = L.popup({ closeButton: false, autoClose: true, closeOnClick: true })
       .setLatLng(latlng)
@@ -302,31 +207,39 @@
     }
   }
 
-  function buildDummyEventsForLog(log) {
-    if (!log || !log.points || log.points.length < 5) return [];
-    const n = log.points.length;
-    const i1 = Math.max(1, Math.floor(n * 0.30));
-    const i2 = Math.max(2, Math.floor(n * 0.70));
+  async function loadMemosTemporary() {
+    try {
+      const url = `${GAS_URL}?type=memos&logId=${encodeURIComponent(LOG_ID_FOR_MEMOS)}`;
+      const res = await fetch(url);
+      if (!res.ok) return [];
+      const memos = await res.json();
+      return Array.isArray(memos) ? memos : [];
+    } catch (e) {
+      return [];
+    }
+  }
 
-    const p1 = log.points[i1];
-    const p2 = log.points[i2];
+  function findNearestPointIndexByTime(points, isoTime) {
+    const target = new Date(isoTime).getTime();
+    if (!points.length) return 0;
 
-    return [
-      {
-        id: 'evt_memo_1',
-        type: 'memo',
-        latlng: [p1.lat, p1.lng],
-        content: '（ダミー）ここでメモ：パン屋が良かった',
-        fired: false
-      },
-      {
-        id: 'evt_photo_1',
-        type: 'photo',
-        latlng: [p2.lat, p2.lng],
-        content: '（ダミー）ここで写真：夕焼けがきれいだった',
-        fired: false
-      }
-    ];
+    let lo = 0;
+    let hi = points.length - 1;
+
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      const t = new Date(points[mid].time).getTime();
+      if (t === target) return mid;
+      if (t < target) lo = mid + 1;
+      else hi = mid - 1;
+    }
+
+    if (lo <= 0) return 0;
+    if (lo >= points.length) return points.length - 1;
+
+    const tLo = Math.abs(new Date(points[lo].time).getTime() - target);
+    const tHi = Math.abs(new Date(points[lo - 1].time).getTime() - target);
+    return (tHi <= tLo) ? (lo - 1) : lo;
   }
 
   function formatLabel(dateIso, unit) {
@@ -337,21 +250,14 @@
   }
 
   function stopPlayback() {
-    if (playTimer) {
-      clearInterval(playTimer);
-      playTimer = null;
-    }
+    if (playTimer) { clearInterval(playTimer); playTimer = null; }
     isPlaying = false;
-    // stopBtn.textContent = "再生";
   }
 
   function startPlayback() {
     const unit = 'minute';
     if (!(unit === 'minute' && selectedLogId)) return;
     if (isPlaying) return;
-
-    // slider.value = 0;
-    // currentEvents.forEach(e => e.fired = false);
 
     isPlaying = true;
     stopBtn.textContent = "停止";
@@ -360,12 +266,7 @@
     playTimer = setInterval(() => {
       const v = Number(slider.value);
       const max = Number(slider.max);
-
-      if (v >= max) {
-        stopPlayback();
-        return;
-      }
-
+      if (v >= max) { stopPlayback(); return; }
       autoPanned = false;
       slider.value = String(v + 1);
       render(Number(slider.value));
@@ -373,38 +274,45 @@
   }
 
   function restartPlaybackFromBeginning() {
-  stopPlayback();
+    stopPlayback();
+    slider.value = "0";
+    autoPanned = false;
+    currentEvents.forEach(e => e.fired = false);
+    popupQueue = [];
+    pumpingQueue = false;
+    render(0);
+    startPlayback();
+  }
 
-  slider.value = "0";
-  autoPanned = false;
+  function pumpPopupQueue() {
+    if (pumpingQueue) return;
+    pumpingQueue = true;
 
-  currentEvents.forEach(e => e.fired = false);
-
-  render(0);
-  startPlayback();
-}
+    const tick = () => {
+      if (!popupQueue.length) { pumpingQueue = false; return; }
+      const item = popupQueue.shift();
+      showEventPopup(item.latlng, item.content, 2200);
+      setTimeout(tick, 550); // 同じ分に複数でも順に出る
+    };
+    tick();
+  }
 
   function render(index) {
+    // 足跡は毎回描き直し
     clearLayers(footprintMarkers);
+
+    // ★イベントは「毎回クリア＆作り直し」する（markerキャッシュは使わない）
     clearLayers(eventMarkers);
 
     const unit = 'minute';
     const isMinuteMode = (unit === 'minute' && selectedLogId);
     const isPlayback = isMinuteMode && isPlaying;
 
-    const isCumulative =
-      unit === 'minute' ||
-      unit === 'hour' ||
-      unit === 'day_sum' ||
-      unit === 'month_sum';
-
-    const visible = isCumulative
-      ? timeBuckets.slice(0, index + 1)
-      : [timeBuckets[index]];
+    const isCumulative = unit === 'minute' || unit === 'hour' || unit === 'day_sum' || unit === 'month_sum';
+    const visible = isCumulative ? timeBuckets.slice(0, index + 1) : [timeBuckets[index]];
 
     const zoom = map.getZoom();
     const isRouteScale = zoom >= 14;
-
     const FOOTPRINT_INTERVAL = 60 * 1000;
     const THIN_BY_DISTANCE = areaRadiusByZoom(zoom);
 
@@ -420,19 +328,16 @@
 
     allVisiblePoints.forEach(p => {
       const t = new Date(p.time).getTime();
-
       if (isRouteScale) {
         if (lastPlacedTime && t - lastPlacedTime < FOOTPRINT_INTERVAL) return;
         lastPlacedTime = t;
       }
-
       const latlng = { lat: p.lat, lng: p.lng };
       if (lastPlacedLatLng) {
         const d = distance(lastPlacedLatLng, latlng);
         if (!isRouteScale && d < THIN_BY_DISTANCE) return;
         if (isRouteScale && d < 8) return;
       }
-
       lastPlacedLatLng = latlng;
       placed.push(latlng);
     });
@@ -452,21 +357,16 @@
         else if (d === 2) opacity = 0.40;
         else opacity = 0.25;
       }
-
-      footprintMarkers.push(
-        L.marker([p.lat, p.lng], { icon: baseIcon, interactive: false, opacity }).addTo(map)
-      );
+      footprintMarkers.push(L.marker([p.lat, p.lng], { icon: baseIcon, interactive: false, opacity }).addTo(map));
     });
 
     label.textContent = formatLabel(timeBuckets[index][0], unit);
 
-    // ===== 追加：経過時間 & 到達距離（起点から）=====
+    // 経過情報
     if (isMinuteMode && selectedLogId) {
       const log = logs.find(l => l.id === selectedLogId);
       if (log && log.points.length > 1 && timeBuckets[index]) {
         const startTime = new Date(log.points[0].time);
-
-        // ★重要：indexは「bucket」なので、bucket時刻までのpointsを拾う
         const bucketIso = timeBuckets[index][0];
         const cutoffMs = new Date(bucketIso).getTime();
 
@@ -493,27 +393,47 @@
       progressLabel.textContent = '';
     }
 
+    // 自動パン
     const lastPlaced = placed.length ? placed[placed.length - 1] : null;
     if (lastPlaced) {
       const bounds = map.getBounds();
-      const padded = bounds.pad(-0.15); // 画面内側15%
+      const padded = bounds.pad(-0.15);
       const lastLatLng = L.latLng(lastPlaced.lat, lastPlaced.lng);
 
       if (!padded.contains(lastLatLng) && !autoPanned) {
-        const zoom = map.getZoom();
-        const p = map.project(lastLatLng, zoom);
-        p.y += 80; // ポップアップ余白
-
-        map.panTo(map.unproject(p, zoom), { animate: true });
+        const z = map.getZoom();
+        const p = map.project(lastLatLng, z);
+        p.y += 80;
+        map.panTo(map.unproject(p, z), { animate: true });
         autoPanned = true;
       }
     }
 
-    if (isMinuteMode && currentEvents.length && lastPlaced) {
+    // ===== イベントアイコン（常駐）=====
+    currentEvents.forEach(e => {
+      const marker = L.marker(e.latlng, {
+        icon: L.divIcon({
+          className: '',
+          html: '<div class="eventIcon">💬</div>',
+          iconSize: [20, 20],
+          iconAnchor: [10, 10]
+        }),
+        interactive: true
+      }).addTo(map);
+
+      // ★ forEach の中で bind する
+      marker.on('click', () => {
+        showEventPopup(e.latlng, e.content, 0);
+      });
+
+      eventMarkers.push(marker);
+    });
+
+    // ===== イベント発火：bucketIndex で判定（ここがズレ解消の肝）=====
+    if (isMinuteMode && isPlaying) {
       currentEvents.forEach(e => {
         if (e.fired) return;
-        const d = distance(lastPlaced, { lat: e.latlng[0], lng: e.latlng[1] });
-        if (d < 30) {
+        if (index === e.bucketIndex) {
           e.fired = true;
           showEventPopup(e.latlng, e.content, 2200);
         }
@@ -523,7 +443,6 @@
 
   function buildLogSelect() {
     dateSelect.innerHTML = '<option value="">散歩を選ぶ</option>';
-
     logs.forEach(l => {
       const d = new Date(l.startIso);
       const yyyy = d.getFullYear();
@@ -531,16 +450,13 @@
       const dd = String(d.getDate()).padStart(2,'0');
       const hh = String(d.getHours()).padStart(2,'0');
       const mi = String(d.getMinutes()).padStart(2,'0');
-
       const note = (l.note || "").trim();
       const title = note ? note : "（メモなし）";
-
       const opt = document.createElement('option');
       opt.value = l.id;
       opt.textContent = `${yyyy}-${mm}-${dd} ${hh}:${mi}  ${title}`;
       dateSelect.appendChild(opt);
     });
-
     if (selectedLogId) dateSelect.value = selectedLogId;
   }
 
@@ -557,16 +473,16 @@
     if (!canPlay) stopPlayback();
   }
 
-  function rebuild() {
+  async function rebuild() {
     stopPlayback();
     autoPanned = false;
+    popupQueue = [];
+    pumpingQueue = false;
 
     buildLogSelect();
     updatePlayButtonsState();
 
     const unit = 'minute';
-
-    // 表示対象ポイント（unit に応じて）
     let targetPoints = [];
 
     if (unit === 'minute') {
@@ -575,28 +491,57 @@
         if (log) {
           targetPoints = log.points;
           timeIcon.textContent = timeIconFromHour(new Date(log.startIso).getHours());
-          currentEvents = buildDummyEventsForLog(log);
+
+          // ★引数なしで呼ぶ
+          const allMemos = await loadMemosTemporary();
+
+          // bucketKey -> bucketIndex を作る
+          const tmpBuckets = buildBuckets('minute', log.points);
+          const bucketIndexMap = new Map();
+          tmpBuckets.forEach(([key], i) => bucketIndexMap.set(key, i));
+
+          const startMs = new Date(log.points[0].time).getTime();
+          const endMs   = new Date(log.points[log.points.length - 1].time).getTime();
+
+          currentEvents = allMemos
+            .filter(m => {
+              const t = new Date(m.time).getTime();
+              return t >= startMs && t <= endMs;
+            })
+            .map((m, idx) => {
+              const nearIdx = findNearestPointIndexByTime(log.points, m.time);
+              const p = log.points[nearIdx] || log.points[0];
+
+              const bKey = makeTimeKey(m.time, 'minute');
+              const bIdx = bucketIndexMap.has(bKey) ? bucketIndexMap.get(bKey) : 0;
+
+              return {
+                id: `memo_${idx}_${m.time}`,
+                latlng: [p.lat, p.lng],       // ★足跡に吸着
+                content: m.text || '',
+                fired: false,
+                bucketIndex: bIdx             // ★bucket indexで発火
+              };
+            });
+
+          // ここで tmpBuckets を本体へ
+          timeBuckets = tmpBuckets;
         }
       } else {
         timeIcon.textContent = "";
         currentEvents = [];
       }
-    } else if (unit === 'day') {
-      // 全体の「日」切り替え（ログ指定は使わず全ログ分）
-      targetPoints = allPoints;
-      timeIcon.textContent = "";
-      currentEvents = [];
-    } else if (unit === 'day_sum') {
-      targetPoints = allPoints;
-      timeIcon.textContent = "";
-      currentEvents = [];
     } else {
       targetPoints = allPoints;
       timeIcon.textContent = "";
       currentEvents = [];
+      timeBuckets = buildBuckets(unit, targetPoints);
     }
 
-    timeBuckets = buildBuckets(unit, targetPoints);
+    // timeBuckets が上で作られてない場合だけ作る
+    if (!timeBuckets || !timeBuckets.length) {
+      timeBuckets = buildBuckets(unit, targetPoints);
+    }
 
     if (!timeBuckets.length) {
       slider.disabled = true;
@@ -613,7 +558,6 @@
     slider.max = timeBuckets.length - 1;
     slider.disabled = false;
 
-    // minute+ログ選択時は「一枚絵」から（末尾）
     if (unit === 'minute' && selectedLogId) slider.value = String(slider.max);
     else slider.value = "0";
 
@@ -644,12 +588,10 @@
     });
 
     logs.sort((a, b) => new Date(a.startIso) - new Date(b.startIso));
-
     status.textContent = `${files.length}ファイル / ${allPoints.length}点`;
-
     dateSelect.disabled = false;
 
-    rebuild();
+    await rebuild();
   }
 
   function parseGPX(text) {
@@ -668,19 +610,16 @@
   slider.addEventListener('input', () => {
     stopPlayback();
     autoPanned = false;
+    popupQueue = [];
+    pumpingQueue = false;
     render(Number(slider.value));
   });
 
-  dateSelect.addEventListener('change', () => {
+  dateSelect.addEventListener('change', async () => {
     stopPlayback();
     selectedLogId = dateSelect.value;
-
-    // 「開始地点へ」ボタン削除の代わりに：ログを選んだら自動で開始地点へ
-    if (selectedLogId) {
-      jumpToSelectedLogStart();
-    }
-
-    rebuild();
+    if (selectedLogId) jumpToSelectedLogStart();
+    await rebuild();
   });
 
   map.on('zoomend', () => {
@@ -697,7 +636,7 @@
       stopPlayback();
     } else {
       stopBtn.textContent = "停止";
-      startPlayback(); // 続きから
+      startPlayback();
     }
   });
 
