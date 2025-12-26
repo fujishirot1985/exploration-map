@@ -304,7 +304,7 @@
     isPlaying = true;
     slider.value = "0";
     autoPanned = false;
-    currentEvents.forEach(e => { e.reached = false; e.fired = false; });
+    currentEvents.forEach(e => {e.state = 'hidden';});
     popupQueue = [];
     pumpingQueue = false;
     render(0);
@@ -332,9 +332,16 @@
     const isMinuteMode = (unit === 'minute' && selectedLogId);
     const isPlayback = isMinuteMode && isPlaying;
 
-    const isCumulative = unit === 'minute' || unit === 'hour' || unit === 'day_sum' || unit === 'month_sum';
-    const visible = isCumulative ? timeBuckets.slice(0, index + 1) : [timeBuckets[index]];
+    const isCumulative =
+      unit === 'minute' || unit === 'hour' || unit === 'day_sum' || unit === 'month_sum';
 
+    const visible = isCumulative
+      ? timeBuckets.slice(0, index + 1)
+      : [timeBuckets[index]];
+
+    // ======================
+    // 足跡計算
+    // ======================
     const zoom = map.getZoom();
     const isRouteScale = zoom >= 14;
     const FOOTPRINT_INTERVAL = 60 * 1000;
@@ -356,12 +363,14 @@
         if (lastPlacedTime && t - lastPlacedTime < FOOTPRINT_INTERVAL) return;
         lastPlacedTime = t;
       }
+
       const latlng = { lat: p.lat, lng: p.lng };
       if (lastPlacedLatLng) {
         const d = distance(lastPlacedLatLng, latlng);
         if (!isRouteScale && d < THIN_BY_DISTANCE) return;
         if (isRouteScale && d < 8) return;
       }
+
       lastPlacedLatLng = latlng;
       placed.push(latlng);
     });
@@ -376,23 +385,36 @@
       let opacity = 1.0;
       if (isPlayback) {
         const d = placed.length - 1 - idx;
-        if (d === 0) opacity = 1.00;
+        if (d === 0) opacity = 1.0;
         else if (d === 1) opacity = 0.65;
-        else if (d === 2) opacity = 0.40;
+        else if (d === 2) opacity = 0.4;
         else opacity = 0.25;
       }
-      footprintMarkers.push(L.marker([p.lat, p.lng], { icon: baseIcon, interactive: false, opacity }).addTo(map));
+
+      footprintMarkers.push(
+        L.marker([p.lat, p.lng], {
+          icon: baseIcon,
+          interactive: false,
+          opacity
+        }).addTo(map)
+      );
     });
 
+    // ======================
+    // ラベル更新
+    // ======================
     label.textContent = formatLabel(timeBuckets[index][0], unit);
 
-    // 経過情報
+    // ======================
+    // 経過距離・時間
+    // ======================
+    progressLabel.textContent = '';
+
     if (isMinuteMode && selectedLogId) {
       const log = logs.find(l => l.id === selectedLogId);
       if (log && log.points.length > 1 && timeBuckets[index]) {
         const startTime = new Date(log.points[0].time);
-        const bucketIso = timeBuckets[index][0];
-        const cutoffMs = new Date(bucketIso).getTime();
+        const cutoffMs = new Date(timeBuckets[index][0]).getTime();
 
         let dist = 0;
         let last = log.points[0];
@@ -410,14 +432,12 @@
         const elapsedMin = Math.floor((currentTimeMs - startTime.getTime()) / 60000);
         const km = (dist / 1000).toFixed(2);
         progressLabel.textContent = `｜＋${elapsedMin}分 ｜ ${km}km`;
-      } else {
-        progressLabel.textContent = '';
       }
-    } else {
-      progressLabel.textContent = '';
     }
 
-    // 自動パン（足跡）
+    // ======================
+    // 自動パン
+    // ======================
     const lastPlaced = placed.length ? placed[placed.length - 1] : null;
     if (lastPlaced) {
       const bounds = map.getBounds();
@@ -433,69 +453,28 @@
       }
     }
 
-    // ===== イベントアイコン（常駐）=====
-    currentEvents.forEach(e => {
-      if (isPlayback && !e.reached) return;
-
-      const icon = createMemoIcon(e.icon);
-
-      const marker = L.marker(e.latlng, {
-        icon: icon || L.divIcon({
-          className: 'eventIcon',
-          html: '💬',           // ← icon 未指定時は従来通り
-          iconSize: [18, 18],
-          iconAnchor: [9, 9]
-        }),
-        interactive: true,
-        zIndexOffset: 1000
-      }).addTo(map);
-
-      marker.on('click', () => {
-        showEventPopup(e.latlng, e.content, 0);
-      });
-
-      eventMarkers.push(marker);
-    });
-
-    // ===== 自動再生中：取りこぼさない発火（>= にする）=====
-    // if (isMinuteMode && isPlaying) {
-    //   currentEvents.forEach(e => {
-    //     if (e.fired) return;
-
-    //     // ★「そのbucketに到達 or 通過」で発火（取りこぼし防止）
-    //     if (index >= e.bucketIndex) {
-    //       // ① 到達した瞬間に icon を出す
-    //       if (!e.reached) {
-    //         e.reached = true;
-    //       }
-
-    //       // ② popup はそのあと（今まで通り）
-    //       if (!e.fired) {
-    //         e.fired = true;
-    //         popupQueue.push({ latlng: e.latlng, content: e.content });
-    //       }
-    //     }
-    //   });
-
-    //   if (popupQueue.length) pumpPopupQueue();
-    // }
-
-    // ===== 自動再生中：到達更新（reached）と popupQueue =====
+    // ======================
+    // イベント状態更新（同時表示）
+    // ======================
     if (isMinuteMode && isPlaying) {
       currentEvents.forEach(e => {
-        if (index >= e.bucketIndex) {
-          if (!e.reached) e.reached = true;           // 先に到達扱い
-          if (!e.fired) {                             // popup は別フラグ
-            e.fired = true;
-            popupQueue.push({ latlng: e.latlng, content: e.content });
-          }
+        if (index >= e.bucketIndex && e.state === 'hidden') {
+          e.state = 'active';
+
+          // アイコン表示と同時に popup
+          popupQueue.push({
+            latlng: e.latlng,
+            content: e.content
+          });
         }
       });
     }
 
-    // ===== イベントアイコン（常駐）=====
+    // ======================
+    // イベントアイコン描画
+    // ======================
     currentEvents.forEach(e => {
-      if (isPlayback && !e.reached) return;
+      if (isPlayback && e.state === 'hidden') return;
 
       const icon = createMemoIcon(e.icon);
 
@@ -510,11 +489,19 @@
         zIndexOffset: 1000
       }).addTo(map);
 
-      marker.on('click', () => showEventPopup(e.latlng, e.content, 0));
+      marker.on('click', () => {
+        showEventPopup(e.latlng, e.content, 0);
+      });
+
       eventMarkers.push(marker);
     });
 
-    if (isMinuteMode && isPlaying && popupQueue.length) pumpPopupQueue();
+    // ======================
+    // popup 実行
+    // ======================
+    if (isMinuteMode && isPlaying && popupQueue.length) {
+      pumpPopupQueue();
+    }
   }
 
   function buildLogSelect() {
@@ -596,9 +583,8 @@
                 latlng: [p.lat, p.lng],       // 足跡に吸着
                 content: m.text || '',
                 icon: m.icon || null,
-                reached: false,
-                fired: false,
-                bucketIndex: bIdx             // bucket indexで発火
+                bucketIndex: bIdx,
+                state: 'hidden' 
               };
             });
 
