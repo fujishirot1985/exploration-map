@@ -488,7 +488,7 @@
     // イベントアイコン描画
     // ======================
     currentEvents.forEach(e => {
-      if (isPlayback && e.state === 'hidden') return;
+      if (e.state === 'hidden') return;
 
       const icon = createMemoIcon(e.icon);
 
