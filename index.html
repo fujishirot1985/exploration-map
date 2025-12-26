@@ -283,7 +283,7 @@
   function startPlayback() {
     const unit = 'minute';
     if (!(unit === 'minute' && selectedLogId)) return;
-    if (isPlaying) return;
+    if (playTimer) return;
 
     isPlaying = true;
     stopBtn.textContent = "停止";
@@ -301,9 +301,10 @@
 
   function restartPlaybackFromBeginning() {
     stopPlayback();
+    isPlaying = true;
     slider.value = "0";
     autoPanned = false;
-    currentEvents.forEach(e => e.fired = false);
+    currentEvents.forEach(e => { e.reached = false; e.fired = false; });
     popupQueue = [];
     pumpingQueue = false;
     render(0);
@@ -434,6 +435,8 @@
 
     // ===== イベントアイコン（常駐）=====
     currentEvents.forEach(e => {
+      if (isPlayback && !e.reached) return;
+
       const icon = createMemoIcon(e.icon);
 
       const marker = L.marker(e.latlng, {
@@ -443,7 +446,8 @@
           iconSize: [18, 18],
           iconAnchor: [9, 9]
         }),
-        interactive: true
+        interactive: true,
+        zIndexOffset: 1000
       }).addTo(map);
 
       marker.on('click', () => {
@@ -454,19 +458,63 @@
     });
 
     // ===== 自動再生中：取りこぼさない発火（>= にする）=====
+    // if (isMinuteMode && isPlaying) {
+    //   currentEvents.forEach(e => {
+    //     if (e.fired) return;
+
+    //     // ★「そのbucketに到達 or 通過」で発火（取りこぼし防止）
+    //     if (index >= e.bucketIndex) {
+    //       // ① 到達した瞬間に icon を出す
+    //       if (!e.reached) {
+    //         e.reached = true;
+    //       }
+
+    //       // ② popup はそのあと（今まで通り）
+    //       if (!e.fired) {
+    //         e.fired = true;
+    //         popupQueue.push({ latlng: e.latlng, content: e.content });
+    //       }
+    //     }
+    //   });
+
+    //   if (popupQueue.length) pumpPopupQueue();
+    // }
+
+    // ===== 自動再生中：到達更新（reached）と popupQueue =====
     if (isMinuteMode && isPlaying) {
       currentEvents.forEach(e => {
-        if (e.fired) return;
-
-        // ★「そのbucketに到達 or 通過」で発火（取りこぼし防止）
         if (index >= e.bucketIndex) {
-          e.fired = true;
-          popupQueue.push({ latlng: e.latlng, content: e.content });
+          if (!e.reached) e.reached = true;           // 先に到達扱い
+          if (!e.fired) {                             // popup は別フラグ
+            e.fired = true;
+            popupQueue.push({ latlng: e.latlng, content: e.content });
+          }
         }
       });
-
-      if (popupQueue.length) pumpPopupQueue();
     }
+
+    // ===== イベントアイコン（常駐）=====
+    currentEvents.forEach(e => {
+      if (isPlayback && !e.reached) return;
+
+      const icon = createMemoIcon(e.icon);
+
+      const marker = L.marker(e.latlng, {
+        icon: icon || L.divIcon({
+          className: 'eventIcon',
+          html: '💬',
+          iconSize: [18, 18],
+          iconAnchor: [9, 9]
+        }),
+        interactive: true,
+        zIndexOffset: 1000
+      }).addTo(map);
+
+      marker.on('click', () => showEventPopup(e.latlng, e.content, 0));
+      eventMarkers.push(marker);
+    });
+
+    if (isMinuteMode && isPlaying && popupQueue.length) pumpPopupQueue();
   }
 
   function buildLogSelect() {
@@ -548,6 +596,7 @@
                 latlng: [p.lat, p.lng],       // 足跡に吸着
                 content: m.text || '',
                 icon: m.icon || null,
+                reached: false,
                 fired: false,
                 bucketIndex: bIdx             // bucket indexで発火
               };
