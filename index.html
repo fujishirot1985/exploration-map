@@ -202,12 +202,12 @@
     return 3000;
   }
 
-  function timeIconFromHour(h) {
-    if (h >= 5 && h < 9)  return "🌅";
-    if (h >= 9 && h < 16) return "☀️";
-    if (h >= 16 && h < 19) return "🌆";
-    return "🌙";
-  }
+  // function timeIconFromHour(h) {
+  //   if (h >= 5 && h < 9)  return "🌅";
+  //   if (h >= 9 && h < 16) return "☀️";
+  //   if (h >= 16 && h < 19) return "🌆";
+  //   return "🌙";
+  // }
 
   function escapeHtml(str) {
     return String(str)
@@ -571,7 +571,7 @@
         const log = logs.find(l => l.id === selectedLogId);
         if (log) {
           targetPoints = log.points;
-          timeIcon.textContent = timeIconFromHour(new Date(log.startIso).getHours());
+          timeIcon.textContent = "";
 
           const allMemos = await loadMemosTemporary();
 
