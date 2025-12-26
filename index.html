@@ -32,7 +32,7 @@
     .timeRow { display:flex; align-items:center; gap:6px; }
 
     .eventIcon {
-      font-size:18px; line-height:18px; transform:translateY(-2px);
+      font-size:20px; line-height:20px; transform:translateY(-2px);
       filter:drop-shadow(0 1px 2px rgba(0,0,0,0.65));
       opacity:0.95; user-select:none;
     }
@@ -77,7 +77,7 @@
 </div>
 
 <script>
-  const GAS_URL = "https://script.google.com/macros/s/AKfycbxThJjge1AwEYweHbMc7jNSo5jfnT-wCaz_DOOzh5reQMa03KSbV5uSSv8pTKAPxPbE/exec";
+  const GAS_URL = "https://script.google.com/macros/s/AKfycbx36tsy3sptr2-gaJnHr__Gq6VWxQ6cunpRMvNISNKjS-2NHorz0qYbKJJV8P0VDdBC/exec";
   const LOG_ID_FOR_MEMOS = "log_test"; // 暫定
 
   const map = L.map('map', { preferCanvas: true }).setView([35.7216, 140.1555], 15);
@@ -112,6 +112,26 @@
   const dateSelect = document.getElementById('dateSelect');
   const playBtn = document.getElementById('playBtn');
   const stopBtn = document.getElementById('stopBtn');
+
+  // ===== メモ用アイコン定義 =====
+  const MEMO_ICON_DEFS = {
+    event:  { html: '📍', className: 'icon-event' },   // 何かあった
+    food:   { html: '🍴', className: 'icon-food' },    // 食べた
+    notice: { html: '💡', className: 'icon-notice' },  // 気づき
+    rest:   { html: '☕', className: 'icon-rest' }   
+  };
+
+  function createMemoIcon(iconType) {
+    const def = MEMO_ICON_DEFS[iconType];
+    if (!def) return null;
+
+    return L.divIcon({
+      className: `eventIcon ${def.className}`,
+      html: def.html,
+      iconSize: [18, 18],
+      iconAnchor: [9, 9]
+    });
+  }
 
   function clearLayers(arr) {
     arr.forEach(l => map.removeLayer(l));
@@ -407,12 +427,14 @@
 
     // ===== イベントアイコン（常駐）=====
     currentEvents.forEach(e => {
+      const icon = createMemoIcon(e.icon);
+
       const marker = L.marker(e.latlng, {
-        icon: L.divIcon({
-          className: '',
-          html: '<div class="eventIcon">💬</div>',
-          iconSize: [20, 20],
-          iconAnchor: [10, 10]
+        icon: icon || L.divIcon({
+          className: 'eventIcon',
+          html: '💬',           // ← icon 未指定時は従来通り
+          iconSize: [18, 18],
+          iconAnchor: [9, 9]
         }),
         interactive: true
       }).addTo(map);
@@ -518,6 +540,7 @@
                 id: `memo_${idx}_${m.time}`,
                 latlng: [p.lat, p.lng],       // 足跡に吸着
                 content: m.text || '',
+                icon: m.icon || null,
                 fired: false,
                 bucketIndex: bIdx             // bucket indexで発火
               };
