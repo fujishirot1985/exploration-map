@@ -98,6 +98,8 @@
   let logs = [];
   let selectedLogId = "";
 
+  let isLoading = false;
+
   let autoPanned = false;
 
   let playTimer = null;
@@ -291,6 +293,7 @@
   }
 
   function startPlayback() {
+    if (isLoading) return;
     const unit = 'minute';
     if (!(unit === 'minute' && selectedLogId)) return;
     if (playTimer) return;
@@ -310,6 +313,7 @@
   }
 
   function restartPlaybackFromBeginning() {
+    if (isLoading) return;
     stopPlayback();
     isPlaying = true;
     slider.value = "0";
@@ -539,6 +543,11 @@
   }
 
   function updatePlayButtonsState() {
+    if (isLoading) {
+      playBtn.disabled = true;
+      stopBtn.disabled = true;
+      return;
+    }
     const canPlay = !!selectedLogId;
     playBtn.disabled = !canPlay;
     stopBtn.disabled = !canPlay;
@@ -637,6 +646,11 @@
   }
 
   async function loadFromGAS() {
+
+    isLoading = true;
+    playBtn.disabled = true;
+    stopBtn.disabled = true;
+
     const res = await fetch(GAS_URL);
     const files = await res.json();
 
@@ -664,6 +678,9 @@
     dateSelect.disabled = false;
 
     await rebuild();
+
+    isLoading = false;
+    updatePlayButtonsState(); 
   }
 
   function parseGPX(text) {
@@ -697,9 +714,15 @@
     progressLabel.textContent = '';
     timeIcon.textContent = '';
 
+    isLoading = true;
+    playBtn.disabled = true;
+    stopBtn.disabled = true;
+
     selectedLogId = dateSelect.value;
     if (selectedLogId) jumpToSelectedLogStart();
     await rebuild();
+    isLoading = false;
+    updatePlayButtonsState();
   });
 
   map.on('zoomend', () => {
