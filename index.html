@@ -270,6 +270,16 @@
 
   function formatLabel(dateIso, unit) {
     const d = new Date(dateIso);
+      if (unit === 'minute') {
+    // 秒なし
+    return d.toLocaleString(undefined, {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    }
     if (unit === "day" || unit === "day_sum") return d.toLocaleDateString();
     if (unit === "month" || unit === "month_sum") return `${d.getFullYear()}年${d.getMonth() + 1}月`;
     return d.toLocaleString();
@@ -508,7 +518,6 @@
     dateSelect.innerHTML = '<option value="">散歩を選ぶ</option>';
     logs.forEach(l => {
       const d = new Date(l.startIso);
-      const yyyy = d.getFullYear();
       const mm = String(d.getMonth()+1).padStart(2,'0');
       const dd = String(d.getDate()).padStart(2,'0');
       const hh = String(d.getHours()).padStart(2,'0');
@@ -517,7 +526,7 @@
       const title = note ? note : "（メモなし）";
       const opt = document.createElement('option');
       opt.value = l.id;
-      opt.textContent = `${yyyy}-${mm}-${dd} ${hh}:${mi}  ${title}`;
+      opt.textContent = `${mm}-${dd} ${hh}:${mi}  ${title}`;
       dateSelect.appendChild(opt);
     });
     if (selectedLogId) dateSelect.value = selectedLogId;
@@ -650,7 +659,7 @@
       });
     });
 
-    logs.sort((a, b) => new Date(a.startIso) - new Date(b.startIso));
+    logs.sort((a, b) => new Date(b.startIso) - new Date(a.startIso));
     status.textContent = `${files.length}ファイル / ${allPoints.length}点`;
     dateSelect.disabled = false;
 
@@ -680,6 +689,14 @@
 
   dateSelect.addEventListener('change', async () => {
     stopPlayback();
+
+      // ★ ここで一旦クリア
+    clearLayers(footprintMarkers);
+    clearLayers(eventMarkers);
+    label.textContent = '読み込み中…';
+    progressLabel.textContent = '';
+    timeIcon.textContent = '';
+
     selectedLogId = dateSelect.value;
     if (selectedLogId) jumpToSelectedLogStart();
     await rebuild();
