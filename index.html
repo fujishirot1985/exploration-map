@@ -241,7 +241,19 @@
       const res = await fetch(url);
       if (!res.ok) return [];
       const memos = await res.json();
-      return Array.isArray(memos) ? memos : [];
+
+      if (!Array.isArray(memos) || memos.length === 0) {
+        return [];
+      }
+
+      return memos.map(m => {
+        const ceil = ceilToNextMinute(m.time);
+        return {
+          ...m,
+          time: ceil.toISOString()   // ← この時点で time を確定
+        };
+      });
+      
     } catch (e) {
       return [];
     }
@@ -268,6 +280,23 @@
     const tLo = Math.abs(new Date(points[lo].time).getTime() - target);
     const tHi = Math.abs(new Date(points[lo - 1].time).getTime() - target);
     return (tHi <= tLo) ? (lo - 1) : lo;
+  }
+
+  function ceilToNextMinute(iso) {
+    const d = new Date(iso);
+    if (d.getSeconds() === 0 && d.getMilliseconds() === 0) return d;
+    d.setMinutes(d.getMinutes() + 1);
+    d.setSeconds(0, 0);
+    return d;
+  }
+
+  function formatElapsedTime(elapsedMin) {
+    if (elapsedMin < 60) {
+      return `${elapsedMin}分`;
+    }
+    const h = Math.floor(elapsedMin / 60);
+    const m = elapsedMin % 60;
+    return `${h}時間${String(m).padStart(2, '0')}分`;
   }
 
   function formatLabel(dateIso, unit) {
@@ -346,25 +375,25 @@
     const isMinuteMode = (unit === 'minute' && selectedLogId);
     const isPlayback = isMinuteMode && isPlaying;
 
-    const isCumulative =
-      unit === 'minute' || unit === 'hour' || unit === 'day_sum' || unit === 'month_sum';
-
-    const visible = isCumulative
-      ? timeBuckets.slice(0, index + 1)
-      : [timeBuckets[index]];
+    const log = logs.find(l => l.id === selectedLogId);
+    if (!log || !timeBuckets[index]) return;
 
     // ======================
-    // 足跡計算
+    // 現在のカットオフ時刻（bucket 基準）
+    // ======================
+    const cutoffMs = new Date(timeBuckets[index][0]).getTime();
+
+    // ======================
+    // 足跡計算（★重要：bucket ではなく log.points を使う）
     // ======================
     const zoom = map.getZoom();
     const isRouteScale = zoom >= 14;
     const FOOTPRINT_INTERVAL = 60 * 1000;
     const THIN_BY_DISTANCE = areaRadiusByZoom(zoom);
 
-    const allVisiblePoints = [];
-    visible.forEach(([_, pts]) => {
-      const sorted = pts.slice().sort((a, b) => new Date(a.time) - new Date(b.time));
-      sorted.forEach(p => allVisiblePoints.push(p));
+    // ★ メモ-only minute でも足跡が消えないように、累積で拾う
+    const allVisiblePoints = log.points.filter(p => {
+      return new Date(p.time).getTime() <= cutoffMs;
     });
 
     const placed = [];
@@ -373,12 +402,14 @@
 
     allVisiblePoints.forEach(p => {
       const t = new Date(p.time).getTime();
+
       if (isRouteScale) {
         if (lastPlacedTime && t - lastPlacedTime < FOOTPRINT_INTERVAL) return;
         lastPlacedTime = t;
       }
 
       const latlng = { lat: p.lat, lng: p.lng };
+
       if (lastPlacedLatLng) {
         const d = distance(lastPlacedLatLng, latlng);
         if (!isRouteScale && d < THIN_BY_DISTANCE) return;
@@ -424,29 +455,27 @@
     // ======================
     progressLabel.textContent = '';
 
-    if (isMinuteMode && selectedLogId) {
-      const log = logs.find(l => l.id === selectedLogId);
-      if (log && log.points.length > 1 && timeBuckets[index]) {
-        const startTime = new Date(log.points[0].time);
-        const cutoffMs = new Date(timeBuckets[index][0]).getTime();
+    if (isMinuteMode && log.points.length > 1) {
+      const startTime = new Date(log.points[0].time).getTime();
 
-        let dist = 0;
-        let last = log.points[0];
-        let currentTimeMs = startTime.getTime();
+      let dist = 0;
+      let last = log.points[0];
+      let currentTimeMs = startTime;
 
-        for (let i = 1; i < log.points.length; i++) {
-          const p = log.points[i];
-          const t = new Date(p.time).getTime();
-          if (t > cutoffMs) break;
-          dist += distance(last, p);
-          last = p;
-          currentTimeMs = t;
-        }
-
-        const elapsedMin = Math.floor((currentTimeMs - startTime.getTime()) / 60000);
-        const km = (dist / 1000).toFixed(2);
-        progressLabel.textContent = `｜＋${elapsedMin}分 ｜ ${km}km`;
+      for (let i = 1; i < log.points.length; i++) {
+        const p = log.points[i];
+        const t = new Date(p.time).getTime();
+        if (t > cutoffMs) break;
+        dist += distance(last, p);
+        last = p;
+        currentTimeMs = t;
       }
+
+      const km = (dist / 1000).toFixed(2);
+      const elapsedMin = Math.floor((currentTimeMs - startTime) / 60000);
+      const timeText = formatElapsedTime(elapsedMin);
+
+      progressLabel.textContent = `｜＋${timeText} ｜ ${km}km`;
     }
 
     // ======================
@@ -468,14 +497,12 @@
     }
 
     // ======================
-    // イベント状態更新（同時表示）
+    // イベント状態更新（メモ）
     // ======================
     if (isMinuteMode && isPlaying) {
       currentEvents.forEach(e => {
         if (index >= e.bucketIndex && e.state === 'hidden') {
           e.state = 'active';
-
-          // アイコン表示と同時に popup
           popupQueue.push({
             latlng: e.latlng,
             content: e.content
@@ -575,14 +602,37 @@
 
           const allMemos = await loadMemosTemporary();
 
-          // buckets（minute）を先に作る
-          const tmpBuckets = buildBuckets('minute', log.points);
-          const bucketIndexMap = new Map();
-          tmpBuckets.forEach(([key], i) => bucketIndexMap.set(key, i));
-
           const startMs = new Date(log.points[0].time).getTime();
           const endMs   = new Date(log.points[log.points.length - 1].time).getTime();
 
+          // ★ 修正①：point + memo の minute を union
+          const bucketKeySet = new Set();
+
+          log.points.forEach(p => {
+            bucketKeySet.add(makeTimeKey(p.time, 'minute'));
+          });
+
+          allMemos.forEach(m => {
+            const t = new Date(m.time).getTime();
+            if (t >= startMs && t <= endMs) {
+              bucketKeySet.add(makeTimeKey(m.time, 'minute'));
+            }
+          });
+
+          const timeBucketKeys = Array.from(bucketKeySet).sort();
+          timeBuckets = timeBucketKeys.map(k => [k, []]);
+
+          const bucketIndexMap = new Map();
+          timeBucketKeys.forEach((k, i) => bucketIndexMap.set(k, i));
+
+          // point を bucket に詰める
+          log.points.forEach(p => {
+            const k = makeTimeKey(p.time, 'minute');
+            const idx = bucketIndexMap.get(k);
+            timeBuckets[idx][1].push(p);
+          });
+
+          // ★ 修正②：memo は memo.time を 1コマとして扱う
           currentEvents = allMemos
             .filter(m => {
               const t = new Date(m.time).getTime();
@@ -592,22 +642,18 @@
               const nearIdx = findNearestPointIndexByTime(log.points, m.time);
               const p = log.points[nearIdx] || log.points[0];
 
-              // ★★★★★ ここが重要：m.time ではなく「吸着した点 p.time」で bucketIndex を作る ★★★★★
-              const bKey = makeTimeKey(p.time, 'minute');               // ←変更点（m.time → p.time）
-              const bIdx = bucketIndexMap.has(bKey) ? bucketIndexMap.get(bKey) : 0;
+              const bKey = makeTimeKey(m.time, 'minute');
+              const bIdx = bucketIndexMap.get(bKey);
 
               return {
                 id: `memo_${idx}_${m.time}`,
-                latlng: [p.lat, p.lng],       // 足跡に吸着
+                latlng: [p.lat, p.lng],
                 content: m.text || '',
                 icon: m.icon || null,
                 bucketIndex: bIdx,
-                state: 'hidden' 
+                state: 'hidden'
               };
             });
-
-          // buckets確定
-          timeBuckets = tmpBuckets;
         }
       } else {
         timeIcon.textContent = "";
