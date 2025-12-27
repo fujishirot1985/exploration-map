@@ -379,19 +379,52 @@
     if (!log || !timeBuckets[index]) return;
 
     // ======================
-    // 現在のカットオフ時刻（bucket 基準）
+    // 表示時刻（分丸め済み）
     // ======================
-    const cutoffMs = new Date(timeBuckets[index][0]).getTime();
+    const currLabelMs = new Date(timeBuckets[index][0]).getTime();
+
+    const prevIndex =
+      (typeof render._prevIndex === 'number') ? render._prevIndex : index;
+
+    const prevLabelMs =
+      timeBuckets[prevIndex]
+        ? new Date(timeBuckets[prevIndex][0]).getTime()
+        : currLabelMs;
+
+    // ★ 前回コマとの差分（分）
+    const deltaMin = Math.max(
+      0,
+      Math.round((currLabelMs - prevLabelMs) / 60000)
+    );
 
     // ======================
-    // 足跡計算（★重要：bucket ではなく log.points を使う）
+    // 経過時間（0 → index を毎回再計算）
+    // ======================
+    let elapsedMin = 0;
+    for (let i = 1; i <= index; i++) {
+      const a = new Date(timeBuckets[i - 1][0]).getTime();
+      const b = new Date(timeBuckets[i][0]).getTime();
+      elapsedMin += Math.max(0, Math.round((b - a) / 60000));
+    }
+
+    // ======================
+    // cutoffMs
+    // ======================
+    let cutoffMs = currLabelMs;
+    if (timeBuckets[index + 1]) {
+      cutoffMs = new Date(timeBuckets[index + 1][0]).getTime() - 1;
+    } else {
+      cutoffMs = currLabelMs + 60 * 1000 - 1;
+    }
+
+    // ======================
+    // 足跡描画
     // ======================
     const zoom = map.getZoom();
     const isRouteScale = zoom >= 14;
     const FOOTPRINT_INTERVAL = 60 * 1000;
     const THIN_BY_DISTANCE = areaRadiusByZoom(zoom);
 
-    // ★ メモ-only minute でも足跡が消えないように、累積で拾う
     const allVisiblePoints = log.points.filter(p => {
       return new Date(p.time).getTime() <= cutoffMs;
     });
@@ -451,32 +484,61 @@
     label.textContent = formatLabel(timeBuckets[index][0], unit);
 
     // ======================
-    // 経過距離・時間
+    // 距離計算
     // ======================
-    progressLabel.textContent = '';
+    let dist = 0;
+    let last = log.points[0];
 
-    if (isMinuteMode && log.points.length > 1) {
-      const startTime = new Date(log.points[0].time).getTime();
-
-      let dist = 0;
-      let last = log.points[0];
-      let currentTimeMs = startTime;
-
-      for (let i = 1; i < log.points.length; i++) {
-        const p = log.points[i];
-        const t = new Date(p.time).getTime();
-        if (t > cutoffMs) break;
-        dist += distance(last, p);
-        last = p;
-        currentTimeMs = t;
-      }
-
-      const km = (dist / 1000).toFixed(2);
-      const elapsedMin = Math.floor((currentTimeMs - startTime) / 60000);
-      const timeText = formatElapsedTime(elapsedMin);
-
-      progressLabel.textContent = `｜＋${timeText} ｜ ${km}km`;
+    for (let i = 1; i < log.points.length; i++) {
+      const p = log.points[i];
+      const t = new Date(p.time).getTime();
+      if (t > cutoffMs) break;
+      dist += distance(last, p);
+      last = p;
     }
+
+    const km = (dist / 1000).toFixed(2);
+
+    // ======================
+    // 経過時間表示（★2段階強調）
+    // ======================
+    const timeText = formatElapsedTime(elapsedMin);
+
+    // デフォルト
+    progressLabel.style.transition = 'none';
+    progressLabel.style.fontWeight = '400';
+    progressLabel.style.transform = 'scale(1)';
+    progressLabel.style.opacity = '0.75';
+
+    // ★ 5分以上：弱強調
+    if (deltaMin >= 5) {
+      progressLabel.style.fontWeight = '600';
+      progressLabel.style.opacity = '0.9';
+      progressLabel.style.transform = 'scale(1.08)';
+      progressLabel.style.transition =
+        'transform 0.18s ease-out, opacity 0.25s ease-out';
+    }
+
+    // ★ 30分以上：強強調
+    if (deltaMin >= 30) {
+      progressLabel.style.fontWeight = '700';
+      progressLabel.style.opacity = '1.0';
+      progressLabel.style.transform = 'scale(1.18)';
+    }
+
+    // 戻し
+    if (deltaMin >= 5) {
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          progressLabel.style.transform = 'scale(1)';
+          progressLabel.style.opacity = '0.8';
+          progressLabel.style.fontWeight = '400';
+        }, 220);
+      });
+    }
+
+    progressLabel.textContent =
+      `｜＋${timeText} ｜ ${km}km`;
 
     // ======================
     // 自動パン
@@ -497,7 +559,7 @@
     }
 
     // ======================
-    // イベント状態更新（メモ）
+    // メモイベント
     // ======================
     if (isMinuteMode && isPlaying) {
       currentEvents.forEach(e => {
@@ -511,14 +573,10 @@
       });
     }
 
-    // ======================
-    // イベントアイコン描画
-    // ======================
     currentEvents.forEach(e => {
       if (e.state === 'hidden') return;
 
       const icon = createMemoIcon(e.icon);
-
       const marker = L.marker(e.latlng, {
         icon: icon || L.divIcon({
           className: 'eventIcon',
@@ -537,12 +595,11 @@
       eventMarkers.push(marker);
     });
 
-    // ======================
-    // popup 実行
-    // ======================
     if (isMinuteMode && isPlaying && popupQueue.length) {
       pumpPopupQueue();
     }
+
+    render._prevIndex = index;
   }
 
   function buildLogSelect() {
