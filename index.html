@@ -88,12 +88,34 @@
   const LOG_ID_FOR_MEMOS = "log_test"; // 暫定
 
   const map = L.map('map', { preferCanvas: true }).setView([35.7216, 140.1555], 15);
-  // L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(map);
-  L.tileLayer(
-    'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
-    { attribution: '© OpenStreetMap © CARTO' }
-  ).addTo(map);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(map);
   
+  // L.tileLayer(
+  //   'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+  //   { attribution: '© OpenStreetMap © CARTO' }
+  // ).addTo(map);
+
+  // const baseMap = L.tileLayer(
+  //   'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+  //   {
+  //     attribution: '© OpenStreetMap © CARTO'
+  //   }
+  // );
+  // const labelLayer = L.tileLayer(
+  //   'https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png',
+  //   {
+  //     attribution: '© OpenStreetMap © CARTO',
+  //     pane: 'labels'
+  //   }
+  // );
+  // // ラベルを最前面に
+  // map.createPane('labels');
+  // map.getPane('labels').style.zIndex = 650;
+  // map.getPane('labels').style.pointerEvents = 'none';
+
+  // baseMap.addTo(map);
+  // labelLayer.addTo(map);
+
   let allPoints = [];
   let timeBuckets = [];
   let footprintMarkers = [];
