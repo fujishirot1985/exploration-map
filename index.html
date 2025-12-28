@@ -88,8 +88,12 @@
   const LOG_ID_FOR_MEMOS = "log_test"; // 暫定
 
   const map = L.map('map', { preferCanvas: true }).setView([35.7216, 140.1555], 15);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(map);
-
+  // L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(map);
+  L.tileLayer(
+    'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+    { attribution: '© OpenStreetMap © CARTO' }
+  ).addTo(map);
+  
   let allPoints = [];
   let timeBuckets = [];
   let footprintMarkers = [];
@@ -366,6 +370,245 @@
     };
     tick();
   }
+
+function render2(index) {
+  clearLayers(footprintMarkers);
+  clearLayers(eventMarkers);
+
+  const unit = 'minute';
+  const isMinuteMode = (unit === 'minute' && selectedLogId);
+  const isPlayback = isMinuteMode && isPlaying;
+
+  const log = logs.find(l => l.id === selectedLogId);
+  if (!log || !timeBuckets[index]) return;
+
+  // ======================
+  // 表示時刻（分丸め済み）
+  // ======================
+  const currLabelMs = new Date(timeBuckets[index][0]).getTime();
+
+  const prevIndex =
+    (typeof render._prevIndex === 'number') ? render._prevIndex : index;
+
+  const prevLabelMs =
+    timeBuckets[prevIndex]
+      ? new Date(timeBuckets[prevIndex][0]).getTime()
+      : currLabelMs;
+
+  // ★ 前回コマとの差分（分）
+  const deltaMin = Math.max(
+    0,
+    Math.round((currLabelMs - prevLabelMs) / 60000)
+  );
+
+  // ======================
+  // 経過時間（index 基準で毎回再計算）
+  // ======================
+  let elapsedMin = 0;
+  for (let i = 1; i <= index; i++) {
+    const a = new Date(timeBuckets[i - 1][0]).getTime();
+    const b = new Date(timeBuckets[i][0]).getTime();
+    elapsedMin += Math.max(0, Math.round((b - a) / 60000));
+  }
+
+  // ======================
+  // cutoffMs
+  // ======================
+  let cutoffMs = currLabelMs;
+  if (timeBuckets[index + 1]) {
+    cutoffMs = new Date(timeBuckets[index + 1][0]).getTime() - 1;
+  } else {
+    cutoffMs = currLabelMs + 60 * 1000 - 1;
+  }
+
+  // ======================
+  // 足跡描画
+  // ======================
+  const zoom = map.getZoom();
+  const isRouteScale = zoom >= 14;
+  const FOOTPRINT_INTERVAL = 60 * 1000;
+  const THIN_BY_DISTANCE = areaRadiusByZoom(zoom);
+
+  const allVisiblePoints = log.points.filter(p => {
+    return new Date(p.time).getTime() <= cutoffMs;
+  });
+
+  const placed = [];
+  let lastPlacedTime = null;
+  let lastPlacedLatLng = null;
+
+  allVisiblePoints.forEach(p => {
+    const t = new Date(p.time).getTime();
+
+    if (isRouteScale) {
+      if (lastPlacedTime && t - lastPlacedTime < FOOTPRINT_INTERVAL) return;
+      lastPlacedTime = t;
+    }
+
+    const latlng = { lat: p.lat, lng: p.lng };
+
+    if (lastPlacedLatLng) {
+      const d = distance(lastPlacedLatLng, latlng);
+      if (!isRouteScale && d < THIN_BY_DISTANCE) return;
+      if (isRouteScale && d < 8) return;
+    }
+
+    lastPlacedLatLng = latlng;
+    placed.push(latlng);
+  });
+
+  const baseIcon = L.icon({
+    iconUrl: 'data:image/svg+xml;base64,' + btoa(footprintSvg),
+    iconSize: [18, 18],
+    iconAnchor: [9, 9]
+  });
+
+  placed.forEach((p, idx) => {
+    let opacity = 1.0;
+    if (isPlayback) {
+      const d = placed.length - 1 - idx;
+      if (d === 0) opacity = 1.0;
+      else if (d === 1) opacity = 0.65;
+      else if (d === 2) opacity = 0.4;
+      else opacity = 0.25;
+    }
+
+    footprintMarkers.push(
+      L.marker([p.lat, p.lng], {
+        icon: baseIcon,
+        interactive: false,
+        opacity
+      }).addTo(map)
+    );
+  });
+
+  // ======================
+  // ラベル更新
+  // ======================
+  label.textContent = formatLabel(timeBuckets[index][0], unit);
+
+  // ======================
+  // 距離計算
+  // ======================
+  let dist = 0;
+  let last = log.points[0];
+
+  for (let i = 1; i < log.points.length; i++) {
+    const p = log.points[i];
+    const t = new Date(p.time).getTime();
+    if (t > cutoffMs) break;
+    dist += distance(last, p);
+    last = p;
+  }
+
+  const km = (dist / 1000).toFixed(2);
+
+  // ======================
+  // 経過時間表示（★時間部分のみ強調）
+  // ======================
+  const timeText = formatElapsedTime(elapsedMin);
+
+  // HTML を先に組み立て
+  progressLabel.innerHTML =
+    `｜＋<span id="elapsedSpan">${timeText}</span> ｜ ${km}km`;
+
+  const elapsedSpan = progressLabel.querySelector('#elapsedSpan');
+
+  // 初期状態
+  elapsedSpan.style.transition = 'none';
+  elapsedSpan.style.fontWeight = '400';
+  elapsedSpan.style.transform = 'scale(1)';
+  elapsedSpan.style.opacity = '0.8';
+
+  // ★ 5分以上：弱強調
+  if (deltaMin >= 5) {
+    elapsedSpan.style.fontWeight = '600';
+    elapsedSpan.style.opacity = '0.9';
+    elapsedSpan.style.transform = 'scale(1.08)';
+    elapsedSpan.style.transition =
+      'transform 0.18s ease-out, opacity 0.25s ease-out';
+  }
+
+  // ★ 30分以上：強強調
+  if (deltaMin >= 30) {
+    elapsedSpan.style.fontWeight = '700';
+    elapsedSpan.style.opacity = '1.0';
+    elapsedSpan.style.transform = 'scale(1.18)';
+  }
+
+  // 戻し
+  if (deltaMin >= 5) {
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        elapsedSpan.style.transform = 'scale(1)';
+        elapsedSpan.style.opacity = '0.85';
+        elapsedSpan.style.fontWeight = '400';
+      }, 220);
+    });
+  }
+
+  // ======================
+  // 自動パン
+  // ======================
+  const lastPlaced = placed.length ? placed[placed.length - 1] : null;
+  if (lastPlaced) {
+    const bounds = map.getBounds();
+    const padded = bounds.pad(-0.15);
+    const lastLatLng = L.latLng(lastPlaced.lat, lastPlaced.lng);
+
+    if (!padded.contains(lastLatLng) && !autoPanned) {
+      const z = map.getZoom();
+      const p = map.project(lastLatLng, z);
+      p.y += 80;
+      map.panTo(map.unproject(p, z), { animate: true });
+      autoPanned = true;
+    }
+  }
+
+  // ======================
+  // メモイベント
+  // ======================
+  if (isMinuteMode && isPlaying) {
+    currentEvents.forEach(e => {
+      if (index >= e.bucketIndex && e.state === 'hidden') {
+        e.state = 'active';
+        popupQueue.push({
+          latlng: e.latlng,
+          content: e.content
+        });
+      }
+    });
+  }
+
+  currentEvents.forEach(e => {
+    if (e.state === 'hidden') return;
+
+    const icon = createMemoIcon(e.icon);
+    const marker = L.marker(e.latlng, {
+      icon: icon || L.divIcon({
+        className: 'eventIcon',
+        html: '💬',
+        iconSize: [18, 18],
+        iconAnchor: [9, 9]
+      }),
+      interactive: true,
+      zIndexOffset: 1000
+    }).addTo(map);
+
+    marker.on('click', () => {
+      showEventPopup(e.latlng, e.content, 0);
+    });
+
+    eventMarkers.push(marker);
+  });
+
+  if (isMinuteMode && isPlaying && popupQueue.length) {
+    pumpPopupQueue();
+  }
+
+  render._prevIndex = index;
+}
+
 
   function render(index) {
     clearLayers(footprintMarkers);
