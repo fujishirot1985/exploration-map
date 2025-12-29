@@ -660,6 +660,9 @@
   }
 
   function renderListMode() {
+    areaRects.forEach(r => map.removeLayer(r));
+    areaRects.length = 0;
+    
     logs.forEach(log => {
       drawAreaGrid(log.points);
       drawMidFlag(log);
@@ -688,7 +691,7 @@
         {
           stroke: false,
           fillColor: '#6a7f8f',
-          fillOpacity: 0.5,
+          fillOpacity: 0.24,
           interactive: false
         }
       ).addTo(map);
