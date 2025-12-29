@@ -22,7 +22,7 @@
       -webkit-appearance:none; width:28px; height:28px; border-radius:50%; background:#fff; border:none;
     }
     select#modeSelect {
-      width: 90px;          /* ここを調整 */
+      width: 110px;          /* ここを調整 */
       flex: 0 0 auto;       /* flex で伸びないように */
     }
     #dateLabel { font-size:14px; color:#fff; font-weight:bold; }
@@ -73,8 +73,8 @@
     <button id="playBtn" disabled>散歩スタート</button>
     <button id="stopBtn" disabled>停止</button>
     <select id="modeSelect">
-      <option value="replay">追体験</option>
-      <option value="list">一覧</option>
+      <option value="replay">思い出す</option>
+      <option value="list">散歩一覧</option>
     </select>
   </div>
 
@@ -126,6 +126,7 @@
 
   let currentMode = 'replay'; 
   let areaRects = [];
+  let activePreviewLogId = null; // 一覧モードで帯を表示中のログ
 
   let allPoints = [];
   let timeBuckets = [];
@@ -169,6 +170,7 @@
 
   function switchMode(mode) {
     currentMode = mode;
+    activePreviewLogId = null; 
 
     // 全レイヤを一旦消す
     clearLayers(footprintMarkers);
@@ -660,12 +662,18 @@
   }
 
   function renderListMode() {
+    // 既存レイヤ全消し
+    clearLayers(eventMarkers);
     areaRects.forEach(r => map.removeLayer(r));
     areaRects.length = 0;
-    
+
     logs.forEach(log => {
-      drawAreaGrid(log.points);
       drawMidFlag(log);
+
+      // ★ クリック中のログだけ帯を出す
+      if (log.id === activePreviewLogId) {
+        drawAreaGrid(log.points);
+      }
     });
   }
 
@@ -717,7 +725,16 @@
     }).addTo(map);
 
     marker.on('click', () => {
-      // ここでは再生しない（仮）
+      // ★ 同じ旗を押したらトグルで消す
+      if (activePreviewLogId === log.id) {
+        activePreviewLogId = null;
+      } else {
+        activePreviewLogId = log.id;
+      }
+
+      renderListMode();
+
+      // タイトルはそのまま表示
       showEventPopup([p.lat, p.lng], log.note || '（タイトルなし）', 0);
     });
 
