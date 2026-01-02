@@ -210,6 +210,7 @@
 
   let logs = [];
   let selectedLogId = "";
+  let filteredLogs = [];
 
   let isLoading = false;
 
@@ -224,6 +225,8 @@
   // ===== List Filters =====
   let filterRecency = 'all';   // 'all' | 'recent'
   let filterDistance = 'all'; // 'all' | 'near' | 'far'
+
+  let shouldRefocusByFilter = false;
 
   // イベント
   let currentEvents = [];
@@ -831,6 +834,12 @@
         hasFocusedLatest = true;
       }
     }
+
+    // ★ 絞り込み変更時のみフォーカス
+    if (shouldRefocusByFilter && viewState === 'list') {
+      focusByFilteredLogs(visibleLogs);
+      shouldRefocusByFilter = false;
+    }
   }
 
   enterReplayBtn.addEventListener('click', () => {
@@ -977,6 +986,32 @@
       return filterDistance === 'near'
         ? d <= NEAR_THRESHOLD
         : d > NEAR_THRESHOLD;
+    });
+  }
+
+  function focusByFilteredLogs(logs) {
+    if (!logs || logs.length === 0) return;
+
+    // ログ全体（道のり）を対象にする
+    // const latlngs = logs.flatMap(log =>
+    //   log.points.map(p => [p.lat, p.lng])
+    // );
+    const latlngs = logs.map(log => {
+      const mid = log.points[Math.floor(log.points.length / 2)];
+      return [mid.lat, mid.lng];
+    });
+
+    if (!latlngs.length) return;
+
+    const bounds = L.latLngBounds(latlngs);
+
+    let maxZoom = 14;
+    if (filterDistance === 'near') maxZoom = 18;
+    if (filterDistance === 'far')  maxZoom = 14;
+
+    map.fitBounds(bounds, {
+      padding: [40, 40],
+      maxZoom
     });
   }
 
@@ -1241,6 +1276,7 @@
     el.addEventListener('change', e => {
       filterRecency = e.target.value;
       activePreviewLogId = null;
+      shouldRefocusByFilter = true;
       renderListMode();
     });
   });
@@ -1249,6 +1285,7 @@
     el.addEventListener('change', e => {
       filterDistance = e.target.value;
       activePreviewLogId = null;
+      shouldRefocusByFilter = true;
       renderListMode();
     });
   });
