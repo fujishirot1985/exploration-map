@@ -249,6 +249,11 @@
   const filterUI = document.getElementById('filterUI');
   
   const HOME_LATLNG = { lat: 35.7195, lng: 140.1609 };
+  const FIT_OPTIONS = {
+    padding: [40, 40],
+    maxZoom: 15, // グリッドがしっかり見える
+    minZoom: 11  // 引きすぎ防止（県レベルまで）
+  };
 
   // ===== メモ用アイコン定義 =====
   const MEMO_ICON_DEFS = {
@@ -914,6 +919,19 @@
       renderListMode();
 
       if (!wasActive) {
+
+        // ★ この散歩の全道程を1画面に収める
+        const latlngs = log.points.map(p => [p.lat, p.lng]);
+        const bounds = L.latLngBounds(latlngs);
+
+        map.fitBounds(bounds, {
+          padding: [40, 40],
+          maxZoom: 15,
+          minZoom: 11,
+          animate: true,
+          duration: 0.6
+        });
+
         showEventPopup([p.lat, p.lng], log.note || '（タイトルなし）', 900);
       }
     });
