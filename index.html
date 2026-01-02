@@ -21,9 +21,14 @@
     input[type="range"]::-webkit-slider-thumb {
       -webkit-appearance:none; width:28px; height:28px; border-radius:50%; background:#fff; border:none;
     }
-    select#modeSelect {
-      width: 110px;          /* ここを調整 */
-      flex: 0 0 auto;       /* flex で伸びないように */
+    button#enterReplayBtn { 
+      flex: 0 0 140px;   /* ここで幅調整（例：140px） */
+      white-space: nowrap;
+    }
+
+    button#listBackBtn {
+      flex: 0 0 80px;
+      opacity: 0.95;
     }
     #dateLabel { font-size:14px; color:#fff; font-weight:bold; }
     #timeIcon { margin-right:6px; font-size:16px; }
@@ -99,12 +104,17 @@
   </div>
 
   <div class="row flex">
+    <button id="listBackBtn" style="display:none;">一覧へ</button>
     <button id="playBtn" disabled>散歩スタート</button>
     <button id="stopBtn" disabled>停止</button>
-    <select id="modeSelect">
-      <option value="replay">思い出す</option>
-      <option value="list">散歩一覧</option>
-    </select>
+    <!-- 一覧で「選択中」のときだけ出る -->
+    <button id="enterReplayBtn" style="display:none;">▶ 思い出す</button>
+  </div>
+
+  <div class="row">
+    <button id="enterReplayBtn" style="display:none;">
+      ▶ 散歩を思い出す
+    </button>
   </div>
 
   <div class="row timeRow">
@@ -153,6 +163,8 @@
   // baseMap.addTo(map);
   // labelLayer.addTo(map);
 
+  let viewState = 'replay'; // 'list' | 'replay'
+
   let currentMode = 'replay'; 
   let areaRects = [];
   let activePreviewLogId = null; // 一覧モードで帯を表示中のログ
@@ -188,6 +200,8 @@
   const dateSelect = document.getElementById('dateSelect');
   const playBtn = document.getElementById('playBtn');
   const stopBtn = document.getElementById('stopBtn');
+  const enterReplayBtn = document.getElementById('enterReplayBtn');
+  const listBackBtn = document.getElementById('listBackBtn');
 
   // ===== メモ用アイコン定義 =====
   const MEMO_ICON_DEFS = {
@@ -196,27 +210,6 @@
     notice: { html: '💡', className: 'icon-notice' },
     rest:   { html: '☕', className: 'icon-rest' }
   };
-
-  function switchMode(mode) {
-    currentMode = mode;
-    activePreviewLogId = null; 
-
-    // 全レイヤを一旦消す
-    clearLayers(footprintMarkers);
-    clearLayers(eventMarkers);
-    if (typeof areaRects !== 'undefined') areaRects.forEach(r => map.removeLayer(r));
-    if (typeof midFlagMarker !== 'undefined' && midFlagMarker) map.removeLayer(midFlagMarker);
-
-    if (mode === 'replay') {
-      // UI表示
-      showReplayUI();
-      render(Number(slider.value));
-    } else {
-      // UI表示
-      showListUI();
-      renderListMode();
-    }
-  }
   
   function createMemoIcon(iconType) {
     const def = MEMO_ICON_DEFS[iconType];
@@ -228,6 +221,55 @@
       iconSize: [18, 18],
       iconAnchor: [9, 9]
     });
+  }
+
+  function enterListMode() {
+    viewState = 'list';
+    stopPlayback();
+
+    // 追体験レイヤ消し（足跡/イベント）
+    clearLayers(footprintMarkers);
+    clearLayers(eventMarkers);
+
+    // UI
+    // 一覧でもログ選択プルダウンは表示して良い（あなたの案）
+    dateSelect.style.display = '';
+    slider.parentElement.style.display = 'none';
+    playBtn.style.display = 'none';
+    stopBtn.style.display = 'none';
+    listBackBtn.style.display = 'none';
+
+    // 一覧の描画
+    renderListMode();
+  }
+
+  function enterReplayModeFromLogId(logId) {
+    viewState = 'replay';
+
+    // 一覧レイヤ（旗・グリッド）を消す
+    areaRects.forEach(r => map.removeLayer(r));
+    areaRects.length = 0;
+    clearLayers(eventMarkers); // listの旗も eventMarkers を使っているのでここで消える
+
+    // 選択確定
+    selectedLogId = logId;
+    dateSelect.value = selectedLogId;
+
+    // UI
+    dateSelect.style.display = '';
+    slider.parentElement.style.display = '';
+    playBtn.style.display = '';
+    stopBtn.style.display = '';
+    listBackBtn.style.display = '';
+    enterReplayBtn.style.display = 'none'; // 思い出すボタンは消す
+
+    // 再生は開始しない（選択モード＝停止状態）
+    stopPlayback();
+    isPlaying = false;
+    stopBtn.textContent = "停止";
+
+    // スライダーやイベントを作り直す
+    rebuild();
   }
 
   function clearLayers(arr) {
@@ -456,6 +498,8 @@
   }
 
   function render(index) {
+    if (viewState !== 'replay') return; 
+    
     clearLayers(footprintMarkers);
     clearLayers(eventMarkers);
 
@@ -699,12 +743,24 @@
     logs.forEach(log => {
       drawMidFlag(log);
 
-      // ★ クリック中のログだけ帯を出す
+      // クリック中のログだけ帯を出す
       if (log.id === activePreviewLogId) {
         drawAreaGrid(log.points);
       }
     });
+
+    // ★ 一覧でフォーカスがあるときだけ「思い出す」を出す
+    enterReplayBtn.style.display = activePreviewLogId ? '' : 'none';
   }
+
+  enterReplayBtn.addEventListener('click', () => {
+    if (!activePreviewLogId) return;
+    enterReplayModeFromLogId(activePreviewLogId);
+  });
+
+  listBackBtn.addEventListener('click', () => {
+    enterListMode();
+  });
 
   function drawAreaGrid(points) {
     const GRID_SIZE = 0.0025;
@@ -759,6 +815,11 @@
       const wasActive = (activePreviewLogId === log.id);
 
       activePreviewLogId = wasActive ? null : log.id;
+  
+      // ★ プルダウンも追随（「クリックしたら切り替わる」）
+      if (!wasActive) {
+        dateSelect.value = log.id;
+      }
 
       renderListMode();
 
@@ -964,6 +1025,8 @@
 
     await rebuild();
 
+    enterListMode();
+
     isLoading = false;
     updatePlayButtonsState(); 
   }
@@ -981,12 +1044,6 @@
     return pts;
   }
 
-  const modeSelect = document.getElementById('modeSelect');
-
-  modeSelect.addEventListener('change', () => {
-    switchMode(modeSelect.value);
-  });
-
   slider.addEventListener('input', () => {
     if (currentMode !== 'replay') return;
     stopPlayback();
@@ -999,7 +1056,22 @@
   dateSelect.addEventListener('change', async () => {
     stopPlayback();
 
-      // ★ ここで一旦クリア
+    const chosen = dateSelect.value;
+
+    if (viewState === 'list') {
+      // ★ 一覧：フォーカスとして扱う（旗をクリックしたのと同じ）
+      activePreviewLogId = chosen || null;
+      renderListMode();
+
+      // 選ばれたログへ軽く寄せる（任意）
+      if (chosen) {
+        const log = logs.find(l => l.id === chosen);
+        if (log) map.panTo(log.firstLatLng, { animate: true });
+      }
+      return;
+    }
+
+    // ===== replay：従来通りの挙動（ログを切り替えて再構築） =====
     clearLayers(footprintMarkers);
     clearLayers(eventMarkers);
     label.textContent = '読み込み中…';
@@ -1010,17 +1082,20 @@
     playBtn.disabled = true;
     stopBtn.disabled = true;
 
-    selectedLogId = dateSelect.value;
+    selectedLogId = chosen;
     if (selectedLogId) jumpToSelectedLogStart();
     await rebuild();
+
     isLoading = false;
     updatePlayButtonsState();
   });
 
   map.on('zoomend', () => {
-    if (currentMode === 'replay') {
-      if (!slider.disabled) render(Number(slider.value));
-    } else {
+    if (viewState === 'replay') {
+      if (!slider.disabled) {
+        render(Number(slider.value));
+      }
+    } else if (viewState === 'list') {
       renderListMode();
     }
   });
