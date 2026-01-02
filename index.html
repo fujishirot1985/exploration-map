@@ -137,16 +137,16 @@
     <div class="row">
       <div class="row filterRow">
         <span>距離</span>
-        <label><input type="radio" name="distance" value="all" checked> 全部</label>
-        <label><input type="radio" name="distance" value="near"> 近く</label>
+        <label><input type="radio" name="distance" value="all"> 全部</label>
+        <label><input type="radio" name="distance" value="near" checked> 近く</label>
         <label><input type="radio" name="distance" value="far"> 遠く</label>
       </div>
     </div>
     <div class="row">
       <div class="row filterRow">
         <span>期間</span>
-        <label><input type="radio" name="recency" value="all" checked> 全部</label>
-        <label><input type="radio" name="recency" value="recent"> 最近</label>
+        <label><input type="radio" name="recency" value="all"> 全部</label>
+        <label><input type="radio" name="recency" value="recent" checked> 最近</label>
       </div>
     </div>
   </div>
@@ -223,10 +223,12 @@
   let hasFocusedLatest = false;
 
   // ===== List Filters =====
-  let filterRecency = 'all';   // 'all' | 'recent'
-  let filterDistance = 'all'; // 'all' | 'near' | 'far'
+  let filterRecency = 'recent';   // 'all' | 'recent'
+  let filterDistance = 'near';    // 'all' | 'near' | 'far'
 
   let shouldRefocusByFilter = false;
+  let listCameraSnapshot = null;
+  // { center: LatLng, zoom: number }
 
   // イベント
   let currentEvents = [];
@@ -946,8 +948,24 @@
           duration: 0.6
         });
 
+        // ★ 一覧時の画角を保存
+        listCameraSnapshot = {
+          center: map.getCenter(),
+          zoom: map.getZoom()
+        };
+
         showEventPopup([p.lat, p.lng], log.note || '（タイトルなし）', 900);
       }
+
+      if (wasActive && listCameraSnapshot) {
+        map.setView(
+          listCameraSnapshot.center,
+          listCameraSnapshot.zoom,
+          { animate: true, duration: 0.4 }
+        );
+        listCameraSnapshot = null;
+      }
+
     });
 
     eventMarkers.push(marker);
