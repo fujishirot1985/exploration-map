@@ -1005,9 +1005,9 @@
 
     const bounds = L.latLngBounds(latlngs);
 
-    let maxZoom = 14;
-    if (filterDistance === 'near') maxZoom = 18;
-    if (filterDistance === 'far')  maxZoom = 14;
+    let maxZoom = 13;
+    if (filterDistance === 'near') maxZoom = 15;
+    if (filterDistance === 'far')  maxZoom = 11;
 
     map.fitBounds(bounds, {
       padding: [40, 40],
