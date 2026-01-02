@@ -59,6 +59,10 @@
       animation:fadeIn 0.22s ease-out forwards;
     }
 
+    @keyframes fadeIn { from { opacity:0; transform:translateY(4px);} to { opacity:1; transform:translateY(0);} }
+    .leaflet-popup-content-wrapper { background:transparent; box-shadow:none; }
+    .leaflet-popup-tip { background:rgba(20,20,20,0.92); }
+
     /* ===== List Mode Flag Highlight ===== */
     .flagWrap { /* 外側（Leafletが位置決めする）には触らない */ 
       pointer-events: auto;
@@ -78,6 +82,22 @@
       opacity: 0.95;
     }
 
+    /* 最新ログ（ほんのり目立たせる） */
+    .flagInner.latest {
+      position: relative;
+      animation: latestPulse 1.2s ease-out 1;
+    }
+
+    .flagInner.latest::before {
+      content: '';
+      position: absolute;
+      inset: -6px;
+      border-radius: 6px;
+      background: rgba(245, 248, 255, 0.55); /* ほぼ白 */
+      filter: blur(3px);
+      z-index: -1;
+    }
+
     /* 選択中：サイズ＋強い発光（確実に分かる） */
     .flagInner.selected{
       transform: translateY(-3px) scale(1.28);
@@ -87,9 +107,11 @@
         drop-shadow(0 0 16px rgba(255,255,255,0.8));
     }
 
-    @keyframes fadeIn { from { opacity:0; transform:translateY(4px);} to { opacity:1; transform:translateY(0);} }
-    .leaflet-popup-content-wrapper { background:transparent; box-shadow:none; }
-    .leaflet-popup-tip { background:rgba(20,20,20,0.92); }
+    @keyframes latestPulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.12); }
+    100% { transform: scale(1); }
+  }
   </style>
 </head>
 <body>
@@ -108,13 +130,7 @@
     <button id="playBtn" disabled>散歩スタート</button>
     <button id="stopBtn" disabled>停止</button>
     <!-- 一覧で「選択中」のときだけ出る -->
-    <button id="enterReplayBtn" style="display:none;">▶ 思い出す</button>
-  </div>
-
-  <div class="row">
-    <button id="enterReplayBtn" style="display:none;">
-      ▶ 散歩を思い出す
-    </button>
+    <button id="enterReplayBtn" style="display:none;">▶ 振り返る</button>
   </div>
 
   <div class="row timeRow">
@@ -183,6 +199,9 @@
 
   let playTimer = null;
   let isPlaying = false;
+
+  let latestLogId = null;
+  let hasFocusedLatest = false;
 
   // イベント
   let currentEvents = [];
@@ -765,6 +784,18 @@
 
     // ★ 一覧でフォーカスがあるときだけ「思い出す」を出す
     enterReplayBtn.style.display = activePreviewLogId ? '' : 'none';
+
+    // ★ 最新ログへ一度だけフォーカス
+    if (!hasFocusedLatest && latestLogId) {
+      const latest = logs.find(l => l.id === latestLogId);
+      if (latest) {
+        map.panTo(latest.firstLatLng, {
+          animate: true,
+          duration: 0.8
+        });
+        hasFocusedLatest = true;
+      }
+    }
   }
 
   enterReplayBtn.addEventListener('click', () => {
@@ -812,36 +843,34 @@
     const p = log.points[midIdx];
 
     const isActive = (log.id === activePreviewLogId);
+    const isLatest = (log.id === latestLogId);
+
+    const classes = [
+      'flagInner',
+      isActive ? 'selected' : '',
+      (!isActive && isLatest) ? 'latest' : ''
+    ].join(' ');
 
     const icon = L.divIcon({
-      className: 'flagWrap',   // ★ 外側は専用クラスにする
-      html: `<span class="flagInner${isActive ? ' selected' : ''}">🚩</span>`,
+      className: 'flagWrap',
+      html: `<span class="${classes}">🚩</span>`,
       iconSize: [24, 24],
       iconAnchor: [12, 24]
     });
 
     const marker = L.marker([p.lat, p.lng], {
       icon,
-      zIndexOffset: isActive ? 2000 : 1200
+      zIndexOffset: isActive ? 2000 : (isLatest ? 1500 : 1200)
     }).addTo(map);
 
     marker.on('click', () => {
       const wasActive = (activePreviewLogId === log.id);
-
       activePreviewLogId = wasActive ? null : log.id;
-  
-      // ★ プルダウンも追随（「クリックしたら切り替わる」）
-      if (!wasActive) {
-        dateSelect.value = log.id;
-      }
-      if (wasActive) {
-        dateSelect.value = '';
-      }
-
+      dateSelect.value = wasActive ? '' : log.id;
       renderListMode();
 
       if (!wasActive) {
-        showEventPopup([p.lat, p.lng], log.note || '（タイトルなし）', 900); // ★ すぐ消える
+        showEventPopup([p.lat, p.lng], log.note || '（タイトルなし）', 900);
       }
     });
 
@@ -878,6 +907,16 @@
       dateSelect.appendChild(opt);
     });
     if (selectedLogId) dateSelect.value = selectedLogId;
+  }
+
+  function focusLatestLogOnce() {
+    if (!latestLogId) return;
+
+    const log = logs.find(l => l.id === latestLogId);
+    if (!log) return;
+
+    const p = log.points[Math.floor(log.points.length / 2)];
+    map.setView([p.lat, p.lng], 15, { animate: false });
   }
 
   function jumpToSelectedLogStart() {
@@ -1025,6 +1064,7 @@
       if (!pts.length) return;
 
       pts.sort((a, b) => new Date(a.time) - new Date(b.time));
+
       allPoints.push(...pts);
 
       logs.push({
@@ -1037,12 +1077,16 @@
     });
 
     logs.sort((a, b) => new Date(b.startIso) - new Date(a.startIso));
+    latestLogId = logs.length ? logs[0].id : null;
     status.textContent = `${files.length}ファイル / ${allPoints.length}点`;
     dateSelect.disabled = false;
 
     await rebuild();
 
     enterListMode();
+
+    // ★ 起動時に一度だけ最新ログへフォーカス
+    focusLatestLogOnce();
 
     isLoading = false;
     updatePlayButtonsState(); 
