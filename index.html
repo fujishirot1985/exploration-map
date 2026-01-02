@@ -545,6 +545,18 @@
 
   function restartPlaybackFromBeginning() {
     if (isLoading) return;
+
+    // ★ 再生開始時はスタート地点にグッと寄る
+    const log = logs.find(l => l.id === selectedLogId);
+    if (log) {
+      const start = log.points[0];
+      map.setView(
+        [start.lat, start.lng],
+        16,               // ← ここ。17でもOK
+        { animate: true, duration: 0.6 }
+      );
+    }
+
     stopPlayback();
     isPlaying = true;
     slider.value = "0";
