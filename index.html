@@ -85,7 +85,7 @@
     /* 最新ログ（ほんのり目立たせる） */
     .flagInner.latest {
       position: relative;
-      animation: latestPulse 1.2s ease-out 1;
+      animation: latestPulse 1.6s ease-out 2;
     }
 
     .flagInner.latest::before {
@@ -108,9 +108,9 @@
     }
 
     @keyframes latestPulse {
-    0% { transform: scale(1); }
-    50% { transform: scale(1.12); }
-    100% { transform: scale(1); }
+      0%   { transform: translateY(-3px) scale(1); }
+      50%  { transform: translateY(-3px) scale(1.22); }
+      100% { transform: translateY(-3px) scale(1); }
   }
   </style>
 </head>
@@ -226,6 +226,9 @@
   let shouldRefocusByFilter = false;
   let listCameraSnapshot = null;
   // { center: LatLng, zoom: number }
+
+  let latestLogId = null;
+  let latestHighlightEnabled = true; 
 
   // イベント
   let currentEvents = [];
@@ -893,7 +896,7 @@
     const p = log.points[midIdx];
 
     const isActive = (log.id === activePreviewLogId);
-    const isLatest = (log.id === latestLogId);
+    const isLatest = latestHighlightEnabled && (log.id === latestLogId);
 
     const classes = [
       'flagInner',
@@ -914,6 +917,9 @@
     }).addTo(map);
 
     marker.on('click', () => {
+      if (latestHighlightEnabled) {
+        latestHighlightEnabled = false;
+      }
       const wasActive = (activePreviewLogId === log.id);
       activePreviewLogId = wasActive ? null : log.id;
       dateSelect.value = wasActive ? '' : log.id;
@@ -986,6 +992,18 @@
       dateSelect.appendChild(opt);
     });
     if (selectedLogId) dateSelect.value = selectedLogId;
+  }
+
+  function inferDefaultDistanceFilter() {
+    if (!latestLogId) return 'all';
+
+    const latest = logs.find(l => l.id === latestLogId);
+    if (!latest) return 'all';
+
+    const d = distanceFromHome(latest);
+    const NEAR_THRESHOLD = 5000;
+
+    return d <= NEAR_THRESHOLD ? 'near' : 'far';
   }
 
   function applyRecencyFilter(logs) {
@@ -1199,6 +1217,14 @@
 
     logs.sort((a, b) => new Date(b.startIso) - new Date(a.startIso));
     latestLogId = logs.length ? logs[0].id : null;
+
+    filterRecency = 'recent';
+    filterDistance = inferDefaultDistanceFilter();
+
+    // ラジオUIにも反映
+    document.querySelector(`input[name="recency"][value="recent"]`).checked = true;
+    document.querySelector(`input[name="distance"][value="${filterDistance}"]`).checked = true;
+
     status.textContent = `${files.length}ファイル / ${allPoints.length}点`;
     dateSelect.disabled = false;
 
@@ -1297,6 +1323,7 @@
   document.querySelectorAll('input[name="recency"]').forEach(el => {
     el.addEventListener('change', e => {
       filterRecency = e.target.value;
+      latestHighlightEnabled = true;
       activePreviewLogId = null;
       shouldRefocusByFilter = true;
       renderListMode();
@@ -1306,6 +1333,7 @@
   document.querySelectorAll('input[name="distance"]').forEach(el => {
     el.addEventListener('change', e => {
       filterDistance = e.target.value;
+      latestHighlightEnabled = true;
       activePreviewLogId = null;
       shouldRefocusByFilter = true;
       renderListMode();
