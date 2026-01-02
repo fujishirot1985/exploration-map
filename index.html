@@ -133,6 +133,24 @@
     <button id="enterReplayBtn" style="display:none;">▶ 振り返る</button>
   </div>
 
+  <div id="filterUI">
+    <div class="row">
+      <div class="row filterRow">
+        <span>表示</span>
+        <label><input type="radio" name="recency" value="all" checked> 全部</label>
+        <label><input type="radio" name="recency" value="recent"> 最近</label>
+      </div>
+    </div>
+    <div class="row">
+      <div class="row filterRow">
+        <span>距離</span>
+        <label><input type="radio" name="distance" value="all" checked> 全部</label>
+        <label><input type="radio" name="distance" value="near"> 近く</label>
+        <label><input type="radio" name="distance" value="far"> 遠く</label>
+      </div>
+    </div>
+  </div>
+
   <div class="row timeRow">
     <span id="timeIcon"></span>
     <span id="dateLabel">読み込み中…</span>
@@ -203,6 +221,10 @@
   let latestLogId = null;
   let hasFocusedLatest = false;
 
+  // ===== List Filters =====
+  let filterRecency = 'all';   // 'all' | 'recent'
+  let filterDistance = 'all'; // 'all' | 'near' | 'far'
+
   // イベント
   let currentEvents = [];
   let lastAutoPopupAt = 0;
@@ -221,6 +243,9 @@
   const stopBtn = document.getElementById('stopBtn');
   const enterReplayBtn = document.getElementById('enterReplayBtn');
   const listBackBtn = document.getElementById('listBackBtn');
+  const filterUI = document.getElementById('filterUI');
+  
+  const HOME_LATLNG = { lat: 35.7195, lng: 140.1609 };
 
   // ===== メモ用アイコン定義 =====
   const MEMO_ICON_DEFS = {
@@ -271,12 +296,18 @@
     stopBtn.style.display = 'none';
     listBackBtn.style.display = 'none';
 
+    // ★ 絞り込みUIを表示
+    filterUI.style.display = '';
+
     // 一覧の描画
     renderListMode();
   }
 
   function enterReplayModeFromLogId(logId) {
     viewState = 'replay';
+
+    // ★ 絞り込みUIを隠す
+    filterUI.style.display = 'none';
 
     // 一覧レイヤ（旗・グリッド）を消す
     areaRects.forEach(r => map.removeLayer(r));
@@ -773,10 +804,14 @@
     areaRects.forEach(r => map.removeLayer(r));
     areaRects.length = 0;
 
-    logs.forEach(log => {
+    // ★ フィルタ適用
+    let visibleLogs = [...logs];
+    visibleLogs = applyRecencyFilter(visibleLogs);
+    visibleLogs = applyDistanceFilter(visibleLogs);
+
+    visibleLogs.forEach(log => {
       drawMidFlag(log);
 
-      // クリック中のログだけ帯を出す
       if (log.id === activePreviewLogId) {
         drawAreaGrid(log.points);
       }
@@ -917,6 +952,32 @@
 
     const p = log.points[Math.floor(log.points.length / 2)];
     map.setView([p.lat, p.lng], 15, { animate: false });
+  }
+
+  function applyRecencyFilter(logs) {
+    if (filterRecency === 'recent') {
+      return logs.slice(0, 5); // 直近5回
+    }
+    return logs;
+  }
+
+  function distanceFromHome(log) {
+    const midIdx = Math.floor(log.points.length / 2);
+    const p = log.points[midIdx];
+    return distance(HOME_LATLNG, { lat: p.lat, lng: p.lng });
+  }
+
+  function applyDistanceFilter(logs) {
+    if (filterDistance === 'all') return logs;
+
+    const NEAR_THRESHOLD = 5000; // 仮：隣3駅くらい
+
+    return logs.filter(log => {
+      const d = distanceFromHome(log);
+      return filterDistance === 'near'
+        ? d <= NEAR_THRESHOLD
+        : d > NEAR_THRESHOLD;
+    });
   }
 
   function jumpToSelectedLogStart() {
@@ -1173,6 +1234,23 @@
       stopBtn.textContent = "停止";
       startPlayback();
     }
+  });
+
+  // ===== List filter events =====
+  document.querySelectorAll('input[name="recency"]').forEach(el => {
+    el.addEventListener('change', e => {
+      filterRecency = e.target.value;
+      activePreviewLogId = null;
+      renderListMode();
+    });
+  });
+
+  document.querySelectorAll('input[name="distance"]').forEach(el => {
+    el.addEventListener('change', e => {
+      filterDistance = e.target.value;
+      activePreviewLogId = null;
+      renderListMode();
+    });
   });
 
   // ★ 起動直後は再生UIを隠す
