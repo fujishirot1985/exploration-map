@@ -53,6 +53,35 @@
       border-radius:10px; padding:8px 10px; max-width:220px;
       animation:fadeIn 0.22s ease-out forwards;
     }
+
+    /* ===== List Mode Flag Highlight ===== */
+    .flagWrap { /* 外側（Leafletが位置決めする）には触らない */ 
+      pointer-events: auto;
+    }
+
+    .flagInner{
+      display:inline-block;
+      font-size: 22px;
+      line-height: 22px;
+      transform: translateY(-3px); /* 既存 eventIcon の見た目を内側へ移す */
+      filter: drop-shadow(0 1px 2px rgba(0,0,0,0.7));
+      text-shadow:
+        -1px -1px 0 rgba(0,0,0,0.6),
+        1px -1px 0 rgba(0,0,0,0.6),
+        -1px  1px 0 rgba(0,0,0,0.6),
+        1px  1px 0 rgba(0,0,0,0.6);
+      opacity: 0.95;
+    }
+
+    /* 選択中：サイズ＋強い発光（確実に分かる） */
+    .flagInner.selected{
+      transform: translateY(-3px) scale(1.28);
+      filter:
+        drop-shadow(0 0 2px rgba(255,255,255,1))
+        drop-shadow(0 0 8px rgba(255,255,255,0.9))
+        drop-shadow(0 0 16px rgba(255,255,255,0.8));
+    }
+
     @keyframes fadeIn { from { opacity:0; transform:translateY(4px);} to { opacity:1; transform:translateY(0);} }
     .leaflet-popup-content-wrapper { background:transparent; box-shadow:none; }
     .leaflet-popup-tip { background:rgba(20,20,20,0.92); }
@@ -699,7 +728,7 @@
         {
           stroke: false,
           fillColor: '#6a7f8f',
-          fillOpacity: 0.24,
+          fillOpacity: 0.48,
           interactive: false
         }
       ).addTo(map);
@@ -712,30 +741,30 @@
     const midIdx = Math.floor(log.points.length / 2);
     const p = log.points[midIdx];
 
+    const isActive = (log.id === activePreviewLogId);
+
     const icon = L.divIcon({
-      className: 'eventIcon',
-      html: '🚩',
+      className: 'flagWrap',   // ★ 外側は専用クラスにする
+      html: `<span class="flagInner${isActive ? ' selected' : ''}">🚩</span>`,
       iconSize: [24, 24],
       iconAnchor: [12, 24]
     });
 
     const marker = L.marker([p.lat, p.lng], {
       icon,
-      zIndexOffset: 1200
+      zIndexOffset: isActive ? 2000 : 1200
     }).addTo(map);
 
     marker.on('click', () => {
-      // ★ 同じ旗を押したらトグルで消す
-      if (activePreviewLogId === log.id) {
-        activePreviewLogId = null;
-      } else {
-        activePreviewLogId = log.id;
-      }
+      const wasActive = (activePreviewLogId === log.id);
+
+      activePreviewLogId = wasActive ? null : log.id;
 
       renderListMode();
 
-      // タイトルはそのまま表示
-      showEventPopup([p.lat, p.lng], log.note || '（タイトルなし）', 0);
+      if (!wasActive) {
+        showEventPopup([p.lat, p.lng], log.note || '（タイトルなし）', 900); // ★ すぐ消える
+      }
     });
 
     eventMarkers.push(marker);
