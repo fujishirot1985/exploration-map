@@ -223,6 +223,13 @@
     });
   }
 
+  function hideReplayControls() {
+    playBtn.style.display = 'none';
+    stopBtn.style.display = 'none';
+    slider.parentElement.style.display = 'none';
+    listBackBtn.style.display = 'none';
+  }
+
   function enterListMode() {
     viewState = 'list';
     stopPlayback();
@@ -230,6 +237,12 @@
     // 追体験レイヤ消し（足跡/イベント）
     clearLayers(footprintMarkers);
     clearLayers(eventMarkers);
+    map.closePopup();
+
+    // ★ 追体験用ラベルをクリア
+    dateLabel.textContent = '';
+    progressLabel.textContent = '';
+    timeIcon.textContent = '';
 
     // UI
     // 一覧でもログ選択プルダウンは表示して良い（あなたの案）
@@ -256,6 +269,7 @@
     dateSelect.value = selectedLogId;
 
     // UI
+    label.textContent = '散歩を準備中…';
     dateSelect.style.display = '';
     slider.parentElement.style.display = '';
     playBtn.style.display = '';
@@ -499,7 +513,7 @@
 
   function render(index) {
     if (viewState !== 'replay') return; 
-    
+
     clearLayers(footprintMarkers);
     clearLayers(eventMarkers);
 
@@ -820,6 +834,9 @@
       if (!wasActive) {
         dateSelect.value = log.id;
       }
+      if (wasActive) {
+        dateSelect.value = '';
+      }
 
       renderListMode();
 
@@ -1114,7 +1131,11 @@
     }
   });
 
+  // ★ 起動直後は再生UIを隠す
+  hideReplayControls();
+
   loadFromGAS();
+
 </script>
 
 </body>
