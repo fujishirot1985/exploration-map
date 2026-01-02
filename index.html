@@ -219,9 +219,6 @@
   let playTimer = null;
   let isPlaying = false;
 
-  let latestLogId = null;
-  let hasFocusedLatest = false;
-
   // ===== List Filters =====
   let filterRecency = 'recent';   // 'all' | 'recent'
   let filterDistance = 'near';    // 'all' | 'near' | 'far'
@@ -844,18 +841,6 @@
     // ★ 一覧でフォーカスがあるときだけ「思い出す」を出す
     enterReplayBtn.style.display = activePreviewLogId ? '' : 'none';
 
-    // ★ 最新ログへ一度だけフォーカス
-    if (!hasFocusedLatest && latestLogId) {
-      const latest = logs.find(l => l.id === latestLogId);
-      if (latest) {
-        map.panTo(latest.firstLatLng, {
-          animate: true,
-          duration: 0.8
-        });
-        hasFocusedLatest = true;
-      }
-    }
-
     // ★ 絞り込み変更時のみフォーカス
     if (shouldRefocusByFilter && viewState === 'list') {
       focusByFilteredLogs(visibleLogs);
@@ -1001,16 +986,6 @@
       dateSelect.appendChild(opt);
     });
     if (selectedLogId) dateSelect.value = selectedLogId;
-  }
-
-  function focusLatestLogOnce() {
-    if (!latestLogId) return;
-
-    const log = logs.find(l => l.id === latestLogId);
-    if (!log) return;
-
-    const p = log.points[Math.floor(log.points.length / 2)];
-    map.setView([p.lat, p.lng], 15, { animate: false });
   }
 
   function applyRecencyFilter(logs) {
@@ -1230,9 +1205,6 @@
     await rebuild();
 
     enterListMode();
-
-    // ★ 起動時に一度だけ最新ログへフォーカス
-    focusLatestLogOnce();
 
     isLoading = false;
     updatePlayButtonsState(); 
