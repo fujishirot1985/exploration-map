@@ -136,17 +136,17 @@
   <div id="filterUI">
     <div class="row">
       <div class="row filterRow">
-        <span>表示</span>
-        <label><input type="radio" name="recency" value="all" checked> 全部</label>
-        <label><input type="radio" name="recency" value="recent"> 最近</label>
-      </div>
-    </div>
-    <div class="row">
-      <div class="row filterRow">
         <span>距離</span>
         <label><input type="radio" name="distance" value="all" checked> 全部</label>
         <label><input type="radio" name="distance" value="near"> 近く</label>
         <label><input type="radio" name="distance" value="far"> 遠く</label>
+      </div>
+    </div>
+    <div class="row">
+      <div class="row filterRow">
+        <span>期間</span>
+        <label><input type="radio" name="recency" value="all" checked> 全部</label>
+        <label><input type="radio" name="recency" value="recent"> 最近</label>
       </div>
     </div>
   </div>
@@ -306,6 +306,8 @@
 
     // ★ 絞り込みUIを表示
     filterUI.style.display = '';
+    // ★ 一覧に戻ったら、絞り込み条件でフォーカスし直す
+    shouldRefocusByFilter = true;
 
     // 一覧の描画
     renderListMode();
@@ -826,8 +828,8 @@
 
     // ★ フィルタ適用
     let visibleLogs = [...logs];
-    visibleLogs = applyRecencyFilter(visibleLogs);
     visibleLogs = applyDistanceFilter(visibleLogs);
+    visibleLogs = applyRecencyFilter(visibleLogs);
 
     visibleLogs.forEach(log => {
       drawMidFlag(log);
