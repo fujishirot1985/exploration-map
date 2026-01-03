@@ -833,6 +833,9 @@
     visibleLogs = applyDistanceFilter(visibleLogs);
     visibleLogs = applyRecencyFilter(visibleLogs);
 
+    // ★ 追加：プルダウンも同期
+    buildLogSelect(visibleLogs);
+
     visibleLogs.forEach(log => {
       drawMidFlag(log);
 
@@ -991,9 +994,9 @@
     dateSelect.style.display = 'none';
   }
 
-  function buildLogSelect() {
+  function buildLogSelect(logList = logs) {
     dateSelect.innerHTML = '<option value="">散歩を選ぶ</option>';
-    logs.forEach(l => {
+    logList.forEach(l => {
       const d = new Date(l.startIso);
       const mm = String(d.getMonth()+1).padStart(2,'0');
       const dd = String(d.getDate()).padStart(2,'0');
