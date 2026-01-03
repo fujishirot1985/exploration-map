@@ -224,8 +224,8 @@
   let filterDistance = 'near';    // 'all' | 'near' | 'far'
 
   let shouldRefocusByFilter = false;
-  let listCameraSnapshot = null;
-  // { center: LatLng, zoom: number }
+  let listOverviewCamera = null; // ① 一覧モード（絞り込み結果全体）
+  let listPreviewCamera  = null; // ② 1ログプレビュー（旗クリック後）
 
   let latestLogId = null;
   let latestHighlightEnabled = true; 
@@ -858,6 +858,25 @@
 
   listBackBtn.addEventListener('click', () => {
     enterListMode();
+
+    // ★ ③ → ② を優先
+    if (listPreviewCamera) {
+      map.setView(
+        listPreviewCamera.center,
+        listPreviewCamera.zoom,
+        { animate: true, duration: 0.5 }
+      );
+      return;
+    }
+
+    // ★ なければ ①
+    if (listOverviewCamera) {
+      map.setView(
+        listOverviewCamera.center,
+        listOverviewCamera.zoom,
+        { animate: true, duration: 0.5 }
+      );
+    }
   });
 
   function drawAreaGrid(points) {
@@ -939,22 +958,18 @@
           duration: 0.6
         });
 
-        // ★ 一覧時の画角を保存
-        listCameraSnapshot = {
-          center: map.getCenter(),
-          zoom: map.getZoom()
-        };
-
         showEventPopup([p.lat, p.lng], log.note || '（タイトルなし）', 900);
       }
 
-      if (wasActive && listCameraSnapshot) {
-        map.setView(
-          listCameraSnapshot.center,
-          listCameraSnapshot.zoom,
-          { animate: true, duration: 0.4 }
-        );
-        listCameraSnapshot = null;
+      if (wasActive && listOverviewCamera) {
+        if (wasActive && listOverviewCamera) {
+          map.setView(
+            listOverviewCamera.center,
+            listOverviewCamera.zoom,
+            { animate: true, duration: 0.4 }
+          );
+          listPreviewCamera = null;
+        }
       }
 
     });
@@ -1055,6 +1070,19 @@
     map.fitBounds(bounds, {
       padding: [40, 40],
       maxZoom
+    });
+
+    snapshotCameraAfterMove((cam) => {
+      listOverviewCamera = cam;
+    });
+  }
+
+  function snapshotCameraAfterMove(setter) {
+    map.once('moveend', () => {
+      setter({
+        center: map.getCenter(),
+        zoom: map.getZoom()
+      });
     });
   }
 
